@@ -1,3 +1,14 @@
 data/__pycache__/
 plot_output/
 processed_series/
+
+*.png
+*.pdf
+*.txt
+*.gif
+*.pkl
+*.pyc
+
+.ipynb_checkpoints/
+figures/BM_kurtosis_temp1.png
+figures/brownian_motion.png
