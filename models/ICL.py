@@ -9,6 +9,76 @@ def closest_color(width, colors):
     return colors[min(colors.keys(), key=lambda k: abs(k-width))]
 
 def recursive_refiner(PDF, seq, curr = -3, refine_depth = -2, main = True, mode = "neighbor"
+                ,model = None, tokenizer = None, good_tokens=None, kv_cache = None,
+                     temperature = 1):
+    """
+    Recursively refines the PDF until desired depth
+
+    Parameters:
+        PDF (MultiResolutionPDF): The PDF to be refined.
+        seq (str): must end with a number, not comma
+        curr (int): The current precision. Default is -prec.
+        refine_depth (int): The depth of refinement. Default is -2.
+        main (bool): Whether the current sequence is on the main branch    
+        kv_cache: cache of seq[0:-1]
+        mode (str): "neighbor" or "all"
+        model: transformer used for refinement.
+
+    Returns:
+    None
+    """
+    if curr == refine_depth:
+        # print("nothing to refine, terminate refiner")
+        return
+    if main:
+        main_digit = seq[curr]
+        trimmed_seq = seq[:curr]
+ 
+        if mode == "neighbor":
+            # 2 off branches
+            if curr < -1:
+                trimmed_kv_cache = trim_kv_cache(kv_cache, curr+1)       
+            for alt_digit in [int(main_digit) - 1, int(main_digit) + 1]:
+                if alt_digit not in [10, -1]:
+                    alt_seq = trimmed_seq + str(alt_digit)
+                    recursive_refiner(PDF, alt_seq, curr, refine_depth, main = False, mode = "all"
+                                      ,model = model, tokenizer = tokenizer, good_tokens=good_tokens, 
+                                      kv_cache = trimmed_kv_cache) 
+                    
+        if mode == "all":
+            # 9 off branches
+            if curr < -1:
+                trimmed_kv_cache = trim_kv_cache(kv_cache, curr+1)       
+            for alt_digit in range(0, 10):
+                if alt_digit != int(main_digit):
+                    alt_seq = trimmed_seq + str(alt_digit)
+                    recursive_refiner(PDF, alt_seq, curr, refine_depth, main = False, mode = "all",
+                                      model = model, tokenizer = tokenizer, good_tokens=good_tokens, 
+                                      kv_cache = trimmed_kv_cache)   
+            
+        if curr < refine_depth - 1:
+            # skip to next main branch
+            # no need to trim cache
+            recursive_refiner(PDF, seq, curr+1, refine_depth, mode = "all",
+                              model = model, tokenizer = tokenizer, main = True, good_tokens=good_tokens,
+                              kv_cache = kv_cache)
+    else:
+        # ready to evaluate
+        probs, kv_cache_new = next_token_prob_from_series(seq, kv_cache = kv_cache, model = model, tokenizer=tokenizer, good_tokens=good_tokens, T=temperature)
+        last_comma_location = seq.rfind(',')
+        num_slice = seq[last_comma_location+1:]
+        last_digit_PDF = MultiResolutionPDF()
+        last_digit_PDF.load_from_prec_digits_prob(num_slice, probs)
+        PDF.refine(last_digit_PDF)
+        if curr < refine_depth - 1:
+            # 10 off branch
+            for i in range(10):
+                alt_seq = seq + str(i)
+                recursive_refiner(PDF, alt_seq, curr+1, refine_depth, main = False, mode = "all",
+                                  model = model, tokenizer = tokenizer, good_tokens=good_tokens,
+                                  kv_cache = kv_cache_new) 
+
+def recursive_refiner_llama(PDF, seq, curr = -3, refine_depth = -2, main = True, mode = "neighbor"
                 ,model = None, tokenizer = None, good_tokens=None, kv_cache = None):
     """
     Recursively refines the PDF until desired depth
@@ -67,6 +137,82 @@ def recursive_refiner(PDF, seq, curr = -3, refine_depth = -2, main = True, mode 
         last_comma_location = seq.rfind(',')
         num_slice = seq[last_comma_location+1:]
         last_digit_PDF = MultiResolutionPDF()
+        last_digit_PDF.load_from_prec_digits_prob(num_slice, probs)
+        PDF.refine(last_digit_PDF)
+        if curr < refine_depth - 1:
+            # 10 off branch
+            for i in range(10):
+                alt_seq = seq + str(i)
+                recursive_refiner(PDF, alt_seq, curr+1, refine_depth, main = False, mode = "all",
+                                  model = model, tokenizer = tokenizer, good_tokens=good_tokens,
+                                  kv_cache = kv_cache_new) 
+
+def recursive_refiner_preprompt(PDF, seq, curr = -3, refine_depth = -2, main = True, mode = "neighbor"
+                , model = None, tokenizer = None, good_tokens=None, kv_cache = None, size_preprompt=0, verbose=0):
+    """
+    Recursively refines the PDF until desired depth
+
+    Parameters:
+        PDF (MultiResolutionPDF): The PDF to be refined.
+        seq (str): must end with a number, not comma
+        curr (int): The current precision. Default is -prec.
+        refine_depth (int): The depth of refinement. Default is -2.
+        main (bool): Whether the current sequence is on the main branch    
+        kv_cache: cache of seq[0:-1]
+        mode (str): "neighbor" or "all"
+        model: transformer used for refinement.
+
+    Returns:
+    None
+    """
+    if verbose:
+        print(f"curr: {curr} | refine_depth: {refine_depth}")
+    
+    if curr == refine_depth:
+        # print("nothing to refine, terminate refiner")
+        return
+    if main:
+        main_digit = seq[curr]
+        trimmed_seq = seq[:curr]
+ 
+        if mode == "neighbor":
+            # 2 off branches
+            if curr < -1:
+                trimmed_kv_cache = trim_kv_cache(kv_cache, curr+1)       
+            for alt_digit in [int(main_digit) - 1, int(main_digit) + 1]:
+                if alt_digit not in [10, -1]:
+                    alt_seq = trimmed_seq + str(alt_digit)
+                    recursive_refiner(PDF, alt_seq, curr, refine_depth, main = False, mode = "all"
+                                      ,model = model, tokenizer = tokenizer, good_tokens=good_tokens, 
+                                      kv_cache = trimmed_kv_cache) 
+                    
+        if mode == "all":
+            # 9 off branches
+            if curr < -1:
+                trimmed_kv_cache = trim_kv_cache(kv_cache, curr+1)       
+            for alt_digit in range(0, 10):
+                if alt_digit != int(main_digit):
+                    alt_seq = trimmed_seq + str(alt_digit)
+                    recursive_refiner(PDF, alt_seq, curr, refine_depth, main = False, mode = "all",
+                                      model = model, tokenizer = tokenizer, good_tokens=good_tokens, 
+                                      kv_cache = trimmed_kv_cache)   
+            
+        if curr < refine_depth - 1:
+            # skip to next main branch
+            # no need to trim cache
+            recursive_refiner(PDF, seq, curr+1, refine_depth, mode = "all",
+                              model = model, tokenizer = tokenizer, main = True, good_tokens=good_tokens,
+                              kv_cache = kv_cache)
+    else:
+        # ready to evaluate
+        probs, kv_cache_new = next_token_prob_from_series(seq, kv_cache = kv_cache, model = model, tokenizer=tokenizer, good_tokens=good_tokens)
+        last_comma_location = seq.rfind(',')
+        num_slice = seq[last_comma_location+1:]
+        last_digit_PDF = MultiResolutionPDF()
+        # Added
+        num_slice = full_series[size_preprompt:][start_idx:end_idx]
+        prob_slice = probs[:,-(number_of_tokens_original-1):][0,start_idx:end_idx].cpu().numpy()
+        # ----
         last_digit_PDF.load_from_prec_digits_prob(num_slice, probs)
         PDF.refine(last_digit_PDF)
         if curr < refine_depth - 1:
@@ -438,7 +584,6 @@ class MultiResolutionPDF:
             color = closest_color(width, colors)
             ax.bar(center, height, width=width, align='center', color=color, alpha=1)
         
-        
         if statistic:
             ax.vlines(self.mean, 0, np.max(self.bin_height_arr), color='blue', label='Mean', lw=2)
             ax.vlines(self.mode, 0, np.max(self.bin_height_arr), color='lightblue', label='Mode', lw=2)
@@ -454,8 +599,317 @@ class MultiResolutionPDF:
         if ax is None:
             plt.show()
 
-    def value_at(self, x):
-        for center, width, height in zip(self.bin_center_arr, self.bin_width_arr, self.bin_height_arr):
-            if center - width / 2 <= x <= center + width / 2:
-                return height
-        return 0
+# class MultiResolutionPDF:
+#     """
+#     A class for managing and visualizing probability density functions (PDFs)
+#     in a multi-resolution format.
+
+#     This class allows for adding data in the form of bins, normalizing the bins, 
+#     computing statistical properties (mean, mode, and standard deviation), plotting 
+#     the PDF, and evaluating the PDF at a given point.
+
+#     Attributes:
+#         bin_center_arr (torch.Tensor): Stores the centers of the bins.
+#         bin_width_arr (torch.Tensor): Stores the widths of the bins.
+#         bin_height_arr (torch.Tensor): Stores the heights of the bins.
+#         mode (float): The mode of the PDF, computed in `compute_stats`.
+#         mean (float): The mean of the PDF, computed in `compute_stats`.
+#         sigma (float): The standard deviation of the PDF, computed in `compute_stats`.
+#     """
+#     def __init__(self):
+#         """
+#         Constructor for the MultiResolutionPDF class.
+
+#         Initializes tensors for bin centers, widths, and heights. Statistical properties
+#         (mode, mean, sigma) are initialized to None.
+#         """
+#         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+#         self.device = device
+#         self.bin_center_arr = torch.tensor([], dtype=torch.float32, device=device)
+#         self.bin_width_arr = torch.tensor([], dtype=torch.float32, device=device)
+#         self.bin_height_arr = torch.tensor([], dtype=torch.float32, device=device)
+#         self.mode = None
+#         self.mean = None
+#         self.sigma = None
+
+#     def add_bin(self, center_arr, width_arr, height_arr, idx=None):
+#         """
+#         Adds bins to the PDF.
+#         Do not normalize because PDF may need multiple add_bin operations
+
+#         Args:
+#             center_arr (array_like): Array or list of bin centers.
+#             width_arr (array_like): Array or list of bin widths.
+#             height_arr (array_like): Array or list of bin heights.
+
+#         Raises:
+#             AssertionError: If the lengths of center_arr, width_arr, and height_arr are not equal.
+#         """
+#         center_arr = torch.tensor(center_arr, dtype=torch.float32, device=self.device)
+#         width_arr = torch.tensor(width_arr, dtype=torch.float32, device=self.device)
+#         height_arr = torch.tensor(height_arr, dtype=torch.float32, device=self.device)
+        
+#         assert center_arr.size(0) == width_arr.size(0) == height_arr.size(0), "center_arr, width_arr, height_arr must have the same length"
+#         if idx is None: # append
+#             self.bin_center_arr = torch.cat((self.bin_center_arr, center_arr))
+#             self.bin_width_arr = torch.cat((self.bin_width_arr, width_arr))
+#             self.bin_height_arr = torch.cat((self.bin_height_arr, height_arr))
+#         else: # insert
+#             self.bin_center_arr = torch.cat((self.bin_center_arr[:idx], center_arr, self.bin_center_arr[idx:]))
+#             self.bin_width_arr = torch.cat((self.bin_width_arr[:idx], width_arr, self.bin_width_arr[idx:]))
+#             self.bin_height_arr = torch.cat((self.bin_height_arr[:idx], height_arr, self.bin_height_arr[idx:]))
+
+#     def sort_by_center(self):
+#         """
+#         Sorts the bins by their centers.
+#         """
+#         if not torch.all(torch.diff(self.bin_center_arr) >= 0): # check if bin_center_arr is already sorted
+#             sort_indices = torch.argsort(self.bin_center_arr) # sort by bin_center_arr
+#             self.bin_center_arr = self.bin_center_arr[sort_indices]
+#             self.bin_width_arr = self.bin_width_arr[sort_indices]
+#             self.bin_height_arr = self.bin_height_arr[sort_indices]
+    
+#     def delete_by_idx(self, idx):
+#         """
+#         Deletes bins from the PDF by their indices.
+
+#         Args:
+#             idx (int or array_like): Index or list of indices of the bins to delete.
+#         """
+#         self.bin_center_arr = torch.cat((self.bin_center_arr[:idx], self.bin_center_arr[idx+1:]))
+#         self.bin_width_arr = torch.cat((self.bin_width_arr[:idx], self.bin_width_arr[idx+1:]))
+#         self.bin_height_arr = torch.cat((self.bin_height_arr[:idx], self.bin_height_arr[idx+1:])) 
+        
+#     def refine(self, Multi_PDF):
+#         """
+#         Refines the PDF by merging it with another MultiResolutionPDF.
+#         Reduce to add_bin if self empty
+    
+#         Args:
+#             Multi_PDF (MultiResolutionPDF): Another MultiResolutionPDF to merge with.
+#         """
+#         if len(self.bin_center_arr) == 0:
+#             self.add_bin(Multi_PDF.bin_center_arr, Multi_PDF.bin_width_arr, Multi_PDF.bin_height_arr)
+#         else:
+#             Multi_PDF.normalize()
+#             assert isinstance(Multi_PDF, MultiResolutionPDF), "Input must be an instance of MultiResolutionPDF"
+            
+#             self.sort_by_center()
+#             right_edges = self.bin_center_arr + self.bin_width_arr / 2
+#             insert_index = torch.searchsorted(right_edges, Multi_PDF.bin_center_arr.min(), right=True).item()
+#             insert_index_right = torch.searchsorted(right_edges, Multi_PDF.bin_center_arr.max(), right=True).item()
+    
+#             print(f"right_edges: {right_edges}")
+#             print(f"Multi_PDF.bin_center_arr.min(): {Multi_PDF.bin_center_arr.min()}")
+#             print(f"Multi_PDF.bin_center_arr.max(): {Multi_PDF.bin_center_arr.max()}")
+#             print(f"insert_index: {insert_index}")
+#             print(f"insert_index_right: {insert_index_right}")
+    
+#             assert insert_index == insert_index_right, "refinement cannot straddle coarse bins"
+            
+#             prefactor = self.bin_width_arr[insert_index] * self.bin_height_arr[insert_index] # probability of coarse bin to replace
+                    
+#             Multi_PDF.bin_height_arr *= prefactor
+#             self.delete_by_idx(insert_index)
+#             self.add_bin(Multi_PDF.bin_center_arr, Multi_PDF.bin_width_arr, Multi_PDF.bin_height_arr, insert_index)
+    
+#             assert torch.all(torch.diff(self.bin_center_arr) >= 0), "final array should be sorted"
+#             self.check_gap_n_overlap()
+#             self.normalize()
+
+#     def coarsen(self, coarse_bin_centers, coarse_bin_widths):
+#         """
+#         Replace fine bins using coarse ones. This is for plotting purposes only.
+
+#         Args:
+#             coarse_bin_centers (torch.Tensor): The centers of the coarse bins.
+#             coarse_bin_widths (torch.Tensor): The widths of the coarse bins.
+#         """
+#         for coarse_bin_center, coarse_bin_width in zip(coarse_bin_centers, coarse_bin_widths):
+#             indices = torch.where((self.bin_center_arr >= coarse_bin_center - coarse_bin_width / 2) &
+#                                   (self.bin_center_arr <= coarse_bin_center + coarse_bin_width / 2))[0]
+
+#             if len(indices) == 0:
+#                 continue
+
+#             total_height = torch.sum(self.bin_height_arr[indices] * self.bin_width_arr[indices])
+
+#             self.bin_center_arr = torch.cat((self.bin_center_arr[:indices[0]], self.bin_center_arr[indices[-1]+1:]))
+#             self.bin_width_arr = torch.cat((self.bin_width_arr[:indices[0]], self.bin_width_arr[indices[-1]+1:]))
+#             self.bin_height_arr = torch.cat((self.bin_height_arr[:indices[0]], self.bin_height_arr[indices[-1]+1:]))
+
+#             self.bin_center_arr = torch.cat((self.bin_center_arr, torch.tensor([coarse_bin_center], dtype=torch.float32, device=self.device)))
+#             self.bin_width_arr = torch.cat((self.bin_width_arr, torch.tensor([coarse_bin_width], dtype=torch.float32, device=self.device)))
+#             self.bin_height_arr = torch.cat((self.bin_height_arr, torch.tensor([total_height / coarse_bin_width], dtype=torch.float32, device=self.device)))
+
+#         sort_indices = torch.argsort(self.bin_center_arr)
+#         self.bin_center_arr = self.bin_center_arr[sort_indices]
+#         self.bin_width_arr = self.bin_width_arr[sort_indices]
+#         self.bin_height_arr = self.bin_height_arr[sort_indices]
+        
+#     def load_from_num_prob(self, num_slice, prob_slice):
+#         """
+#         Loads the PDF from a given number slice and probability slice.
+
+#         Args:
+#             num_slice (array_like): The number slice to load from.
+#             prob_slice (array_like): The probability slice to load from.
+#         """
+#         assert len(num_slice) == len(prob_slice), "number of digits must equal number of probs"
+#         preceding_digits = None
+#         for idx, probs in enumerate(prob_slice):
+#             single_digit_PDF = MultiResolutionPDF()
+#             single_digit_PDF.load_from_prec_digits_prob(preceding_digits, probs)
+#             self.refine(single_digit_PDF)
+#             preceding_digits = num_slice[:idx+1]
+            
+#     def load_from_prec_digits_prob(self, preceding_digits, probs):
+#         """
+#         Loads the PDF from a given preceding digits and probabilities of the last digit.
+
+#         Args:
+#             preceding_digits (array_like): The preceding digits, 
+#                 which imply left_edge and bin_width
+#             probs (array_like): Distribution of next digit
+#         """
+#         probs = torch.tensor(probs, dtype=torch.float32, device=self.device)
+#         assert len(probs.shape) == 1, "probs must be 1D"
+#         if preceding_digits is None:
+#             prec_len = 0
+#             w = 1
+#             left_edge = 0
+#         else:
+#             prec_len = len(preceding_digits)
+#             w = 0.1 ** prec_len
+#             left_edge = int(preceding_digits) * 10 * w
+#         # x_coords = torch.linspace(left_edge, left_edge + 10 * w, 10, device=self.device, endpoint=False) + 0.5 * w
+#         x_coords = torch.linspace(left_edge, left_edge + 10 * w, 10, device=self.device) + 0.5 * w
+        
+#         self.add_bin(center_arr=x_coords, width_arr=torch.ones(10, device=self.device) * w, height_arr=probs)
+#         self.normalize()    
+    
+#     def normalize(self, report=False):
+#         """
+#         Normalizes the PDF so that the total area under the bins equals 1.
+#         Prints the total area before and after normalization.
+#         """
+#         total_area = torch.sum(self.bin_width_arr * self.bin_height_arr)
+#         if total_area == 1.:
+#             if report:
+#                 print('already normalized')
+#         else:
+#             if report:
+#                 print('total area before normalization:', total_area)
+#             self.bin_height_arr = self.bin_height_arr / total_area
+            
+#     def compute_stats(self):  
+#         """
+#         Computes and updates the statistical properties of the PDF: mean, mode, and standard deviation (sigma).
+#         """
+#         self.mean = torch.sum(self.bin_center_arr * self.bin_width_arr * self.bin_height_arr).item()
+#         self.mode = self.bin_center_arr[torch.argmax(self.bin_height_arr)].item()
+#         variance = torch.sum((self.bin_center_arr - self.mean) ** 2 * self.bin_height_arr * self.bin_width_arr).item()
+#         self.sigma = torch.sqrt(variance).item()
+            
+#     def compute_moment(self, n):
+#         """
+#         Computes the nth mean-centered moment of the PDF.
+
+#         Args:
+#             n (int): The order of the moment to compute.
+
+#         Returns:
+#             float: The nth moment of the PDF.
+#         """
+#         if self.mean is None:
+#             self.compute_stats()
+#         return torch.sum((self.bin_center_arr - self.mean) ** n * self.bin_height_arr * self.bin_width_arr).item()
+        
+#     def rescale_temperature(self, alpha):
+#         """
+#         Rescale bins as if the original temperature 
+#         of softmax is scaled from T to alpha T
+#         """
+#         self.bin_height_arr = self.bin_height_arr ** (1 / alpha)
+#         self.normalize()
+        
+# def check_gap_n_overlap(self):
+#     bin_centers_right = self.bin_center_arr[1:] - self.bin_width_arr[1:] / 2
+#     bin_centers_left = self.bin_center_arr[:-1] + self.bin_width_arr[:-1] / 2
+    
+#     print("Bin centers (right edges):", bin_centers_right)
+#     print("Bin centers (left edges):", bin_centers_left)
+    
+#     assert torch.allclose(bin_centers_right, bin_centers_left), "bin overlap detected"
+
+        
+#     def discretize(self, func, mode='pdf'):
+#         """
+#         Args:
+#             func: a function supported on self.bin_center_arr.
+#                   should be implemented using torch operations for parallelization
+#             mode: 'pdf': approximate probability of bin using its center
+#                   'cdf': integrate over bin 
+#         Populate bin height by discretizing
+#         """
+#         if mode == 'pdf':
+#             self.bin_height_arr = func(self.bin_center_arr)
+#         elif mode == 'cdf':
+#             right_edge = self.bin_center_arr + self.bin_width_arr / 2
+#             left_edge = self.bin_center_arr - self.bin_width_arr / 2
+#             prob_arr = func(right_edge) - func(left_edge)
+#             self.bin_height_arr = prob_arr / self.bin_width_arr
+#         self.normalize()
+        
+#     def BT_dist(self, Multi_PDF):
+#         """
+#         Calculate the Bhattacharyya distance with another Multi_PDF object
+#         """          
+#         assert torch.all(self.bin_center_arr == Multi_PDF.bin_center_arr), "Only PDFs of the same discretization are comparable"
+#         weighted_PQ_arr = torch.sqrt(self.bin_height_arr * Multi_PDF.bin_height_arr) * self.bin_width_arr
+#         return -torch.log(torch.sum(weighted_PQ_arr)).item()
+    
+#     def KL_div(self, Multi_PDF):
+#         """
+#         Calculate the KL divergence D_KL(self||Multi_PDF)
+#         Prone to numerical instabilities
+#         """          
+#         assert torch.all(self.bin_center_arr == Multi_PDF.bin_center_arr), "Only PDFs of the same discretization are comparable"
+#         log_ratio = torch.log(self.bin_height_arr) - torch.log(Multi_PDF.bin_height_arr)
+#         weighted_log_ratio = log_ratio * self.bin_height_arr * self.bin_width_arr
+#         return torch.sum(weighted_log_ratio).item()
+        
+#     def plot(self, ax=None, log_scale=False, statistic=True):
+#         """
+#         Plots the PDF as a bar chart.
+
+#         Args:
+#             ax (matplotlib.axes.Axes, optional): Matplotlib axis object. If None, a new figure and axis are created.
+#             log_scale (bool, optional): If True, sets the y-axis to logarithmic scale.
+#         """
+#         if ax is None:
+#             fig, ax = plt.subplots(figsize=(16, 4), dpi=100)
+
+#         for center, width, height in zip(self.bin_center_arr, self.bin_width_arr, self.bin_height_arr):
+#             color = closest_color(width.item(), colors)
+#             ax.bar(center.item(), height.item(), width=width.item(), align='center', color=color, alpha=1)
+        
+#         if statistic:
+#             ax.vlines(self.mean, 0, torch.max(self.bin_height_arr).item(), color='blue', label='Mean', lw=2)
+#             ax.vlines(self.mode, 0, torch.max(self.bin_height_arr).item(), color='lightblue', label='Mode', lw=2)
+#             ax.hlines(y=torch.max(self.bin_height_arr).item(), xmin=self.mean - self.sigma, xmax=self.mean + self.sigma, color='g', label='Sigma', lw=2)
+
+#         if log_scale:
+#             ax.set_yscale('log')
+
+#         ax.legend()
+
+#         if ax is None:
+#             plt.show()
+
+#     def value_at(self, x):
+#         x = torch.tensor(x, device=self.device)
+#         for center, width, height in zip(self.bin_center_arr, self.bin_width_arr, self.bin_height_arr):
+#             if center - width / 2 <= x <= center + width / 2:
+#                 return height.item()
+#         return 0

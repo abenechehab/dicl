@@ -5,7 +5,8 @@ from tqdm.notebook import tqdm
 
 from transformers import (
     LlamaForCausalLM, 
-    LlamaTokenizer
+    LlamaTokenizer,
+    AutoTokenizer
 )
 from data.serialize import serialize_arr, SerializerSettings
 
@@ -25,8 +26,13 @@ def get_tokenizer(model):
 
     assert model_size in ["7b", "13b", "70b"]  
     
-    tokenizer = LlamaTokenizer.from_pretrained(
-    llama2_model_string(model_size, chat),
+    # tokenizer = LlamaTokenizer.from_pretrained(
+    # "/data01/huggingface/hub/models--meta-llama--Llama-2-7b-chat-hf/snapshots/c1b0db933684edbfe29a06fa47eb19cc48025e93/",
+    # use_fast=False,
+    # )
+
+    tokenizer = AutoTokenizer.from_pretrained(
+    "/home/abenechehab/hugguing_face_hub/models--meta-llama--Meta-Llama-3-8B/snapshots/62bd457b6fe961a42a631306577e622c83876cb6/",
     use_fast=False,
     )
 
@@ -51,7 +57,8 @@ def get_model_and_tokenizer(model):
     assert model_size in ["7b", "13b", "70b"]
     tokenizer = get_tokenizer(model)
     model = LlamaForCausalLM.from_pretrained(
-        llama2_model_string(model_size, chat),
+        # "/data01/huggingface/hub/models--meta-llama--Llama-2-7b-chat-hf/snapshots/c1b0db933684edbfe29a06fa47eb19cc48025e93/",
+        "/home/abenechehab/hugguing_face_hub/models--meta-llama--Meta-Llama-3-8B/snapshots/62bd457b6fe961a42a631306577e622c83876cb6/",
         device_map="auto",   
         torch_dtype=torch.float16,
     )

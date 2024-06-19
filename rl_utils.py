@@ -24,7 +24,7 @@ from data.serialize import serialize_arr, deserialize_str, SerializerSettings
 # -------------------------------------------------------------------------
 
 def calculate_multiPDF_llama3(
-    full_series, model, tokenizer, temperature=1.0, number_of_tokens_original=None,
+    full_series, model, tokenizer, n_states=1000, temperature=1.0, number_of_tokens_original=None,
 ):
     '''
      This function calculates the multi-resolution probability density function (PDF) for a given series.
@@ -39,8 +39,10 @@ def calculate_multiPDF_llama3(
      Returns:
      list: A list of PDFs for the series.
     '''
+    assert n_states <= 1000, f'if n_states ({n_states}) is larger than 1000, there will be more than 1 token per value!'
+    
     good_tokens_str = []
-    for num in range(1000):
+    for num in range(n_states):
         good_tokens_str.append(str(num))
     good_tokens = [tokenizer.convert_tokens_to_ids(token) for token in good_tokens_str]
 
@@ -77,7 +79,7 @@ def calculate_multiPDF_llama3(
 
     # release memory
     del logit_mat  #, kv_cache_main
-    return PDF_list
+    return PDF_list, probs
 
 def serialize_gaussian(prec, time_series, mean_series, sigma_series):
     """
@@ -109,10 +111,7 @@ def serialize_gaussian(prec, time_series, mean_series, sigma_series):
     full_series = serialize_arr(rescaled_array, settings)
     return (full_series, rescaled_true_mean_arr, rescaled_true_sigma_arr)
 
-def gym_generate_random_policy(Number_of_steps: int = 200, env_name: str = 'HalfCheetah', seed: int = 7):
-    env = gym.make(env_name)
-    N_observations = env.observation_space.shape[0]
-    N_actions = env.action_space.shape[0]
+def gym_generate_random_policy(env: gym.Env, Number_of_steps: int = 200, seed: int = 7):
 
     env.np_random.__setstate__(np.random.default_rng(seed).__getstate__())
 
@@ -126,20 +125,39 @@ def gym_generate_random_policy(Number_of_steps: int = 200, env_name: str = 'Half
     # Generate the episode
     for t in range(Number_of_steps):
         action = env.action_space.sample()
+        
         next_obs, reward, terminated, truncated, info = env.step(action)
-        observations.append(obs)
-        actions.append(action)
-        rewards.append(reward)
-        terminateds.append(terminated)
-        truncateds.append(truncated)
-        obs = copy.copy(next_obs)
+        
+        observations.append(np.array(obs).reshape(1,-1))
+        actions.append(np.array(action).reshape(1,-1))
+        rewards.append(np.array(reward).reshape(1,-1))
+        terminateds.append(np.array(terminated).reshape(1,-1))
+        truncateds.append(np.array(truncated).reshape(1,-1))
+        
+        if terminated or truncated:
+            observations.append(np.array(next_obs).reshape(1,-1))
+            none_action = np.empty(np.array(action).reshape(1,-1).shape)
+            none_action[:] = np.nan
+            actions.append(none_action)
+            none_reward = np.empty(np.array(reward).reshape(1,-1).shape)
+            none_reward[:] = np.nan
+            rewards.append(none_reward)
+            none_terminated = np.empty(np.array(terminated).reshape(1,-1).shape)
+            none_terminated[:] = np.nan
+            terminateds.append(none_terminated)
+            none_truncated = np.empty(np.array(truncated).reshape(1,-1).shape)
+            none_truncated[:] = np.nan
+            truncateds.append(none_truncated)
+            obs, _ = env.reset()
+        else:
+            obs = copy.copy(next_obs)
 
-    observations = np.stack(observations, axis=0)
-    actions = np.stack(actions, axis=0)
+    observations = np.stack(observations, axis=0).reshape((-1, 1))
+    actions = np.stack(actions, axis=0).reshape((-1, 1))
     rewards = np.stack(rewards, axis=0).reshape((-1, 1))
 
     X = np.concatenate([observations, actions, rewards], axis=1)
-    return X, N_observations, N_actions
+    return X
 
 def load_offline_dataset(path: str):
     X = pd.read_csv(path, index_col=0)
@@ -209,28 +227,28 @@ def make_RL_time_serie(
 
     return series_dict, N_dim
 
-def icl_prediction(model, tokenizer, series_dict: dict, temperature: float, pre_prompt: str = ""):
+def icl_prediction(model, tokenizer, series_dict: dict, temperature: float, n_states: int = 1000, pre_prompt: str = ""):
     number_of_tokens_original = None
     pre_prompt = ""
     full_series = series_dict['full_series']
     # print(f"full_series: {full_series[:10]}")
     # number_of_tokens_original = len(tokenizer(full_series)['input_ids'])
     # print(f"number_of_tokens_original: {number_of_tokens_original}")
-    PDF_list = calculate_multiPDF_llama3(
+    PDF_list, probs = calculate_multiPDF_llama3(
         pre_prompt+full_series,
         model=model,
         tokenizer=tokenizer,
+        n_states=n_states,
         temperature=temperature,
         number_of_tokens_original=number_of_tokens_original,
     )
     series_dict['PDF_list'] = PDF_list
+    series_dict['probs'] = probs.detach().cpu().numpy()
     return series_dict
 
 def compute_statistics(series_dict: dict):
     full_series = series_dict['full_series']
     PDF_list = series_dict['PDF_list']
-    rescaled_true_mean_arr = series_dict['rescaled_true_mean_arr']
-    rescaled_true_sigma_arr = series_dict['rescaled_true_sigma_arr']
 
     PDF_true_list = copy.deepcopy(PDF_list)
     discrete_BT_loss = []
@@ -244,7 +262,7 @@ def compute_statistics(series_dict: dict):
     sigma_arr = []
     moment_3_arr = []
     moment_4_arr = []
-    for PDF, PDF_true, true_mean, true_sigma in zip(PDF_list, PDF_true_list, rescaled_true_mean_arr, rescaled_true_sigma_arr):
+    for PDF, PDF_true in zip(PDF_list, PDF_true_list):
         PDF_true.discretize(cdf, mode = "cdf")
         PDF_true.compute_stats()
         discrete_BT_loss += [PDF_true.BT_dist(PDF)]
@@ -270,8 +288,6 @@ def compute_statistics(series_dict: dict):
         'moment_4_arr': np.array(moment_4_arr),
         'kurtosis_arr': kurtosis_arr,
         'kurtosis_error': (kurtosis_arr-3)**2,
-        'error_mean': np.abs(rescaled_true_mean_arr - mean_arr),
-        'error_mode': np.abs(rescaled_true_mean_arr - mode_arr),
         'discrete_BT_loss': np.array(discrete_BT_loss),
         'discrete_KL_loss': np.array(discrete_KL_loss),
     }
