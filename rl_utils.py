@@ -11,6 +11,7 @@ import pandas as pd
 
 import copy
 from tqdm import tqdm
+import pickle
 
 import torch
 from ICL import MultiResolutionPDF
@@ -24,7 +25,7 @@ from data.serialize import serialize_arr, deserialize_str, SerializerSettings
 # -------------------------------------------------------------------------
 
 def calculate_multiPDF_llama3(
-    full_series, model, tokenizer, n_states=1000, temperature=1.0, number_of_tokens_original=None,
+    full_series, model, tokenizer, n_states=1000, temperature=1.0, number_of_tokens_original=None, use_cache=False, kv_cache_prev=None,
 ):
     '''
      This function calculates the multi-resolution probability density function (PDF) for a given series.
@@ -54,11 +55,11 @@ def calculate_multiPDF_llama3(
 
     torch.cuda.empty_cache()
     with torch.no_grad():
-        out = model(batch['input_ids'].cuda())  # use_cache=True)
+        out = model(batch['input_ids'].cuda(), use_cache=use_cache, past_key_values=kv_cache_prev)
 
     logit_mat = out['logits']
 
-    # kv_cache_main = out['past_key_values']
+    kv_cache_main = out['past_key_values'] if use_cache else None
     logit_mat_good = logit_mat[:,:,good_tokens].clone()
 
     if number_of_tokens_original:
@@ -66,11 +67,10 @@ def calculate_multiPDF_llama3(
     else:
         probs = torch.nn.functional.softmax(logit_mat_good[:,1:,:] / temperature, dim=-1)
 
-
     PDF_list = []
 
     # start_loop_from = 1 if use_instruct else 0
-    for i in tqdm(range(1,int(probs.shape[1]),2)):
+    for i in range(1,int(probs.shape[1]),2):
         PDF = MultiResolutionPDF()
         PDF.bin_center_arr = np.arange(0,1000) / 100
         PDF.bin_width_arr = np.array(1000*[0.01])
@@ -78,8 +78,8 @@ def calculate_multiPDF_llama3(
         PDF_list.append(PDF)
 
     # release memory
-    del logit_mat  #, kv_cache_main
-    return PDF_list, probs
+    del logit_mat, kv_cache_prev  #, kv_cache_main
+    return PDF_list, probs, kv_cache_main
 
 def serialize_gaussian(prec, time_series, mean_series, sigma_series):
     """
@@ -227,7 +227,7 @@ def make_RL_time_serie(
 
     return series_dict, N_dim
 
-def icl_prediction(model, tokenizer, series_dict: dict, temperature: float, n_states: int = 1000, pre_prompt: str = ""):
+def icl_prediction(model, tokenizer, series_dict: dict, temperature: float, n_states: int = 1000, pre_prompt: str = "", save: bool = False, save_path: str = ""):
     number_of_tokens_original = None
     pre_prompt = ""
     full_series = series_dict['full_series']
@@ -244,6 +244,9 @@ def icl_prediction(model, tokenizer, series_dict: dict, temperature: float, n_st
     )
     series_dict['PDF_list'] = PDF_list
     series_dict['probs'] = probs.detach().cpu().numpy()
+    if save:
+        with open(save_path, 'wb') as f:
+            pickle.dump(series_dict, f)
     return series_dict
 
 def compute_statistics(series_dict: dict):
@@ -253,8 +256,6 @@ def compute_statistics(series_dict: dict):
     PDF_true_list = copy.deepcopy(PDF_list)
     discrete_BT_loss = []
     discrete_KL_loss = []
-    def cdf(x):
-        return 0.5 * (1 + erf((x - true_mean) / (true_sigma * np.sqrt(2))))
 
     ### Extract statistics from MultiResolutionPDF
     mean_arr = []
@@ -262,11 +263,13 @@ def compute_statistics(series_dict: dict):
     sigma_arr = []
     moment_3_arr = []
     moment_4_arr = []
-    for PDF, PDF_true in zip(PDF_list, PDF_true_list):
-        PDF_true.discretize(cdf, mode = "cdf")
-        PDF_true.compute_stats()
-        discrete_BT_loss += [PDF_true.BT_dist(PDF)]
-        discrete_KL_loss += [PDF_true.KL_div(PDF)]
+    for PDF, PDF_true, true_mean, true_sigma in zip(PDF_list, PDF_true_list, series_dict['rescaled_true_mean_arr'] , series_dict['rescaled_true_sigma_arr']):
+        # def cdf(x):
+        #     return 0.5 * (1 + erf((x - true_mean) / (true_sigma * np.sqrt(2))))
+        # PDF_true.discretize(cdf, mode = "cdf")
+        # PDF_true.compute_stats()
+        # discrete_BT_loss += [PDF_true.BT_dist(PDF)]
+        # discrete_KL_loss += [PDF_true.KL_div(PDF)]
 
         PDF.compute_stats()
         mean, mode, sigma = PDF.mean, PDF.mode, PDF.sigma
@@ -288,8 +291,8 @@ def compute_statistics(series_dict: dict):
         'moment_4_arr': np.array(moment_4_arr),
         'kurtosis_arr': kurtosis_arr,
         'kurtosis_error': (kurtosis_arr-3)**2,
-        'discrete_BT_loss': np.array(discrete_BT_loss),
-        'discrete_KL_loss': np.array(discrete_KL_loss),
+        # 'discrete_BT_loss': np.array(discrete_BT_loss),
+        # 'discrete_KL_loss': np.array(discrete_KL_loss),
     }
     return statistics
 

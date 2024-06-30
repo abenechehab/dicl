@@ -32,7 +32,7 @@ def get_tokenizer(model):
     # )
 
     tokenizer = AutoTokenizer.from_pretrained(
-    "/home/abenechehab/hugguing_face_hub/models--meta-llama--Meta-Llama-3-8B/snapshots/62bd457b6fe961a42a631306577e622c83876cb6/",
+    "/data01/huggingface/hub/models--meta-llama--Meta-Llama-3-8B-Instruct/snapshots/c4a54320a52ed5f88b7a2f84496903ea4ff07b45/",
     use_fast=False,
     )
 
@@ -55,13 +55,16 @@ def get_model_and_tokenizer(model):
     chat = len(name_parts) > 1
 
     assert model_size in ["7b", "13b", "70b"]
+    print(f"getting tokenizer")
     tokenizer = get_tokenizer(model)
+    print(f"getting model")
     model = LlamaForCausalLM.from_pretrained(
         # "/data01/huggingface/hub/models--meta-llama--Llama-2-7b-chat-hf/snapshots/c1b0db933684edbfe29a06fa47eb19cc48025e93/",
         "/home/abenechehab/hugguing_face_hub/models--meta-llama--Meta-Llama-3-8B/snapshots/62bd457b6fe961a42a631306577e622c83876cb6/",
         device_map="auto",   
         torch_dtype=torch.float16,
     )
+    print(f"finish loading model")
     # model = LlamaForCausalLM.from_pretrained(
     # "/home/admin-quad/LLM/llama/llama-2-7b/",
     # device_map="auto",   

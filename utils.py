@@ -165,12 +165,12 @@ def interpolate_wass_barycenter_breg(P, hashmap, reg):
         P[sorted_keys[i]: sorted_keys[i+1]] = distribs.T
 
 def compute_wass_bar_unbalanced(p1, p2, n_weight, reg, reg_m):
-    
+
     B_wass = np.zeros((len(p1), n_weight))
     weight_list = np.linspace(0, 1, n_weight)
 
     A = np.vstack((p1, p2)).T
-    
+
     M = ot.utils.dist0(len(p1))
     M /= M.max()
     for i in range(0, n_weight):
@@ -180,12 +180,12 @@ def compute_wass_bar_unbalanced(p1, p2, n_weight, reg, reg_m):
     return B_wass
 
 def compute_wass_bar_unbalanced_breg(p1, p2, n_weight, reg):
-    
+
     B_wass = np.zeros((len(p1), n_weight))
     weight_list = np.linspace(0, 1, n_weight)
 
     A = np.vstack((p1, p2)).T
-    
+
     M = ot.utils.dist0(len(p1))
     M /= M.max()
     for i in range(0, n_weight):
