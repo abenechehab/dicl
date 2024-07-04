@@ -38,10 +38,13 @@ source venv/bin/activate
 ```
 pip install -e .
 ```
-
-- (for developers, install the optional dependencies)
+- [optional] for developers, install the optional dependencies
 ```
 pip install -e .[dev]
+```
+- [optional] for RL, install the optional dependencies
+```
+pip install -e .[rl]
 ```
 
 ## Getting started
