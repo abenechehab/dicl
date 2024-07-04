@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+
+[project]
+name = "LLMICL"
+# authors = [
+#    {name = "Abdelhakim Benechehab", email = "abdelhakim.benechehab@gmail.com"}
+# ]
+dynamic = ["version", "readme", "dependencies"]
+description = "ICL for dynamical systems."
+requires-python = ">=3.8"
+
+[project.optional-dependencies]
+dev = ['ruff', 'pre-commit', 'black']  # 'pytest', 'pytest-cov', 'pytest-check', 'pytest-mock',
+
+[tool.setuptools]
+license-files = ['LICEN[CS]E*', 'COPYING*', 'NOTICE*', 'AUTHORS*']
+
+[project.scripts]
+# exp-launcher = "multi_step_mbrl.exp_launcher:exp_launcher_command"
+
+[tool.setuptools.dynamic]
+readme = { file = ["README.md"] }
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools_scm]
+
+[tool.ruff]
+line-length = 88
