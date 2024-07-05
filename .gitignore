@@ -4,7 +4,6 @@ processed_series/
 
 *.png
 *.pdf
-*.txt
 *.gif
 *.pkl
 *.pyc
@@ -12,3 +11,5 @@ processed_series/
 .ipynb_checkpoints/
 figures/BM_kurtosis_temp1.png
 figures/brownian_motion.png
+
+*.egg-info/
