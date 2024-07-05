@@ -1,0 +1,15 @@
+# original
+numpy
+torch
+openai 
+tiktoken
+tqdm
+matplotlib
+pandas<2.0.0
+transformers
+multiprocess
+
+# added
+scipy
+scikit-learn
+accelerate
