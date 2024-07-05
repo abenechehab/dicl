@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
-from typing import TYPE_CHECKING, NamedTuple, Optional, List
+from typing import TYPE_CHECKING, Optional, List
+from dataclasses import dataclass
 
 import copy
 from tqdm import tqdm
@@ -28,8 +29,8 @@ from llmicl.rl_helpers.rl_utils import (
     compute_statistics,
 )
 
-
-class ICLObject(NamedTuple):
+@dataclass
+class ICLObject():
     raw_time_serie: Optional[NDArray[np.float32]] = None
     str_series: Optional[str] = None
     rescaled_true_mean_arr: Optional[NDArray[np.float32]] = None
@@ -260,9 +261,9 @@ class RLICLTrainer(ICLTrainer):
 
     def update_context(
         self,
-        time_series: np.array,
+        time_series: NDArray[np.float32],
         context_length: int = 100,
-        update_min_max: bool = True
+        update_min_max: bool = True,
     ):
         self.context_length = context_length
         assert len(time_series.shape) > 1 and time_series.shape[1]==self.n_observations, f"Not all observations are given in time series of shape: {time_series}"
@@ -337,9 +338,49 @@ class RLICLTrainer(ICLTrainer):
 
     def compute_statistics(self,):
         for dim in range(self.n_observations):
-            self.icl_object[dim] = compute_statistics(
-                series_dict=self.icl_object[dim],
-            )
+            PDF_list = self.icl_object[dim].PDF_list
+
+            PDF_true_list = copy.deepcopy(PDF_list)
+
+            ### Extract statistics from MultiResolutionPDF
+            mean_arr = []
+            mode_arr = []
+            sigma_arr = []
+            moment_3_arr = []
+            moment_4_arr = []
+            for PDF, PDF_true, true_mean, true_sigma in zip(
+                PDF_list,
+                PDF_true_list,
+                self.icl_object[dim].rescaled_true_mean_arr,
+                self.icl_object[dim].rescaled_true_sigma_arr,
+            ):
+                # def cdf(x):
+                #     return 0.5 * (1 + erf((x - true_mean) / (true_sigma * np.sqrt(2))))
+                # PDF_true.discretize(cdf, mode = "cdf")
+                # PDF_true.compute_stats()
+                # discrete_BT_loss += [PDF_true.BT_dist(PDF)]
+                # discrete_KL_loss += [PDF_true.KL_div(PDF)]
+
+                PDF.compute_stats()
+                mean, mode, sigma = PDF.mean, PDF.mode, PDF.sigma
+                moment_3 = PDF.compute_moment(3)
+                moment_4 = PDF.compute_moment(4)
+
+                mean_arr.append(mean)
+                mode_arr.append(mode)
+                sigma_arr.append(sigma)
+                moment_3_arr.append(moment_3)
+                moment_4_arr.append(moment_4)
+
+            kurtosis_arr = np.array(moment_4_arr) / np.array(sigma_arr)**4
+
+            self.icl_object[dim].mean_arr = np.array(mean_arr)
+            self.icl_object[dim].mode_arr = np.array(mode_arr)
+            self.icl_object[dim].sigma_arr = np.array(sigma_arr)
+            self.icl_object[dim].moment_3_arr = np.array(moment_3_arr)
+            self.icl_object[dim].moment_4_arr = np.array(moment_4_arr)
+            self.icl_object[dim].kurtosis_arr = kurtosis_arr
+            self.icl_object[dim].kurtosis_error = (kurtosis_arr - 3) ** 2
         return self.icl_object
 
     def build_tranistion_matrices(self, reg: float = 5e-3):
