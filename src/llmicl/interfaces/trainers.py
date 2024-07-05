@@ -26,7 +26,6 @@ from llmicl.legacy.data.serialize import serialize_arr, SerializerSettings
 # )
 from llmicl.rl_helpers.rl_utils import (
     calculate_multiPDF_llama3,
-    compute_statistics,
 )
 
 @dataclass
@@ -109,14 +108,16 @@ class UnivariateICLTrainer(ICLTrainer):
     def update_context(
         self,
         time_series: NDArray[np.float32],
+        mean_series: NDArray[np.float32],
+        sigma_series: NDArray[np.float32],
         context_length: int = 100,
         update_min_max: bool = True,
     ):
         self.context_length = context_length
 
         time_serie = time_series[:self.context_length].flatten()
-        mean_series = copy.copy(time_serie)
-        std_series = np.zeros_like(mean_series)
+        mean_series = mean_series[: self.context_length].flatten()
+        std_series = sigma_series[: self.context_length].flatten()
 
         # ------------------ serialize_gaussian ------------------
         settings = SerializerSettings(
@@ -129,7 +130,6 @@ class UnivariateICLTrainer(ICLTrainer):
             fixed_length=False,
             max_val = 10
         )
-        time_serie = np.array(time_serie)
 
         if update_min_max:
             self.icl_object.rescaling_min = time_serie.min()
@@ -191,9 +191,49 @@ class UnivariateICLTrainer(ICLTrainer):
         return self.icl_object
 
     def compute_statistics(self,):
-        self.icl_object = compute_statistics(
-            series_dict=self.icl_object,
-        )
+        PDF_list = self.icl_object.PDF_list
+
+        PDF_true_list = copy.deepcopy(PDF_list)
+
+        ### Extract statistics from MultiResolutionPDF
+        mean_arr = []
+        mode_arr = []
+        sigma_arr = []
+        moment_3_arr = []
+        moment_4_arr = []
+        for PDF, PDF_true, true_mean, true_sigma in zip(
+            PDF_list,
+            PDF_true_list,
+            self.icl_object.rescaled_true_mean_arr,
+            self.icl_object.rescaled_true_sigma_arr,
+        ):
+            # def cdf(x):
+            #     return 0.5 * (1 + erf((x - true_mean) / (true_sigma * np.sqrt(2))))
+            # PDF_true.discretize(cdf, mode = "cdf")
+            # PDF_true.compute_stats()
+            # discrete_BT_loss += [PDF_true.BT_dist(PDF)]
+            # discrete_KL_loss += [PDF_true.KL_div(PDF)]
+
+            PDF.compute_stats()
+            mean, mode, sigma = PDF.mean, PDF.mode, PDF.sigma
+            moment_3 = PDF.compute_moment(3)
+            moment_4 = PDF.compute_moment(4)
+
+            mean_arr.append(mean)
+            mode_arr.append(mode)
+            sigma_arr.append(sigma)
+            moment_3_arr.append(moment_3)
+            moment_4_arr.append(moment_4)
+
+        kurtosis_arr = np.array(moment_4_arr) / np.array(sigma_arr)**4
+
+        self.icl_object.mean_arr = np.array(mean_arr)
+        self.icl_object.mode_arr = np.array(mode_arr)
+        self.icl_object.sigma_arr = np.array(sigma_arr)
+        self.icl_object.moment_3_arr = np.array(moment_3_arr)
+        self.icl_object.moment_4_arr = np.array(moment_4_arr)
+        self.icl_object.kurtosis_arr = kurtosis_arr
+        self.icl_object.kurtosis_error = (kurtosis_arr - 3) ** 2
         return self.icl_object
 
     def build_tranistion_matrices(self, reg: float = 5e-3):
