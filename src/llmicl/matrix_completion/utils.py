@@ -101,12 +101,9 @@ def completion_matrix_ot(bins, ns, loss):
                 P[tok] = bin_list
                 values_and_losses[tok] = loss[idx]
     interpolate_wass_barycenter(P, values_and_losses, 1e-5, 0.01)
-    print(f"after ot: {np.sum(np.isnan(ps))}")
     for idx in range(149,850):
         P[idx][:149], P[idx][850:] = [0.0] * 149, [0.0] * 150
-    print(f"after borders: {np.sum(np.isnan(ps))}")
     P = simple_normalize(P)
-    print(f"after normalize: {np.sum(np.isnan(ps))}")
     P[:149], P[850:] = [one_prob_return(1000,150)] * 149, [one_prob_return(1000,849)] * 150
     return P, values_and_losses
 
@@ -138,10 +135,10 @@ def completion_matrix_ot_breg(bins, ns, loss, reg):
     print(f"after last normalize: {np.sum(np.isnan(P))}")
     return P, values_and_losses
 
-def completion_matrix_ot_breg_from_matrix(P, reg):
-    interpolate_wass_barycenter_breg(P, values_and_losses, reg=reg)
-    P = simple_normalize(P)
-    return P, values_and_losses
+# def completion_matrix_ot_breg_from_matrix(P, reg):
+#     interpolate_wass_barycenter_breg(P, values_and_losses, reg=reg)
+#     P = simple_normalize(P)
+#     return P, values_and_losses
 
 
 def interpolate_wass_barycenter(P, hashmap, reg, reg_m):

@@ -1,9 +1,4 @@
-### Set up directory
-import sys
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3,4,5"
-parent_dir = os.path.dirname(os.getcwd())
-sys.path.append(parent_dir)
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -12,13 +7,16 @@ import copy
 import pickle
 
 import torch
-from ICL import MultiResolutionPDF
+from llmicl.legacy.models.ICL import MultiResolutionPDF
 
 from sklearn.preprocessing import MinMaxScaler
 
 import gymnasium as gym
 
-from data.serialize import serialize_arr, SerializerSettings
+from llmicl.legacy.data.serialize import serialize_arr, SerializerSettings
+
+if TYPE_CHECKING:
+    from llmicl.interfaces.trainers import ICLObject
 # -------------------------------------------------------------------------
 
 def calculate_multiPDF_llama3(
@@ -38,7 +36,7 @@ def calculate_multiPDF_llama3(
      list: A list of PDFs for the series.
     '''
     assert n_states <= 1000, f'if n_states ({n_states}) is larger than 1000, there will be more than 1 token per value!'
-    
+
     good_tokens_str = []
     for num in range(n_states):
         good_tokens_str.append(str(num))
@@ -122,15 +120,15 @@ def gym_generate_random_policy(env: gym.Env, Number_of_steps: int = 200, seed: i
     # Generate the episode
     for t in range(Number_of_steps):
         action = env.action_space.sample()
-        
+
         next_obs, reward, terminated, truncated, info = env.step(action)
-        
+
         observations.append(np.array(obs).reshape(1,-1))
         actions.append(np.array(action).reshape(1,-1))
         rewards.append(np.array(reward).reshape(1,-1))
         terminateds.append(np.array(terminated).reshape(1,-1))
         truncateds.append(np.array(truncated).reshape(1,-1))
-        
+
         if terminated or truncated:
             observations.append(np.array(next_obs).reshape(1,-1))
             none_action = np.empty(np.array(action).reshape(1,-1).shape)
@@ -246,13 +244,10 @@ def icl_prediction(model, tokenizer, series_dict: dict, temperature: float, n_st
             pickle.dump(series_dict, f)
     return series_dict
 
-def compute_statistics(series_dict: dict):
-    full_series = series_dict['full_series']
-    PDF_list = series_dict['PDF_list']
+def compute_statistics(icl_object: "ICLObject"):
+    PDF_list = icl_object.PDF_list
 
     PDF_true_list = copy.deepcopy(PDF_list)
-    discrete_BT_loss = []
-    discrete_KL_loss = []
 
     ### Extract statistics from MultiResolutionPDF
     mean_arr = []
@@ -260,7 +255,7 @@ def compute_statistics(series_dict: dict):
     sigma_arr = []
     moment_3_arr = []
     moment_4_arr = []
-    for PDF, PDF_true, true_mean, true_sigma in zip(PDF_list, PDF_true_list, series_dict['rescaled_true_mean_arr'] , series_dict['rescaled_true_sigma_arr']):
+    for PDF, PDF_true, true_mean, true_sigma in zip(PDF_list, PDF_true_list, icl_object.rescaled_true_mean_arr, icl_object.rescaled_true_sigma_arr):
         # def cdf(x):
         #     return 0.5 * (1 + erf((x - true_mean) / (true_sigma * np.sqrt(2))))
         # PDF_true.discretize(cdf, mode = "cdf")
@@ -280,18 +275,17 @@ def compute_statistics(series_dict: dict):
         moment_4_arr.append(moment_4)
 
     kurtosis_arr = np.array(moment_4_arr) / np.array(sigma_arr)**4
-    statistics = {
-        'mean_arr': np.array(mean_arr),
-        'mode_arr': np.array(mode_arr),
-        'sigma_arr': np.array(sigma_arr),
-        'moment_3_arr': np.array(moment_3_arr),
-        'moment_4_arr': np.array(moment_4_arr),
-        'kurtosis_arr': kurtosis_arr,
-        'kurtosis_error': (kurtosis_arr-3)**2,
-        # 'discrete_BT_loss': np.array(discrete_BT_loss),
-        # 'discrete_KL_loss': np.array(discrete_KL_loss),
-    }
-    return statistics
+
+    icl_object.mean_arr = np.array(mean_arr)
+    icl_object.mode_arr = np.array(mode_arr)
+    icl_object.sigma_arr = np.array(sigma_arr)
+    icl_object.moment_3_arr = np.array(moment_3_arr)
+    icl_object.moment_4_arr = np.array(moment_4_arr)
+    icl_object.kurtosis_arr = kurtosis_arr
+    icl_object.kurtosis_error = (kurtosis_arr - 3) ** 2
+
+    return icl_object
+
 
 def to_plot_stats(statistics: dict, series_dict: dict, N_dim: int, Number_of_steps: int = 200):
     mode_arr = statistics['mode_arr'][N_dim-1:-1].reshape((-1, N_dim))
