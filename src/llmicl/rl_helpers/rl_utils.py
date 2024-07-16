@@ -286,6 +286,55 @@ def compute_statistics(icl_object: "ICLObject"):
 
     return icl_object
 
+def compute_statistics_old(series_dict: dict):
+    PDF_list = series_dict["PDF_list"]
+
+    PDF_true_list = copy.deepcopy(PDF_list)
+
+    ### Extract statistics from MultiResolutionPDF
+    mean_arr = []
+    mode_arr = []
+    sigma_arr = []
+    moment_3_arr = []
+    moment_4_arr = []
+    for PDF, PDF_true, true_mean, true_sigma in zip(
+        PDF_list,
+        PDF_true_list,
+        series_dict["rescaled_true_mean_arr"],
+        series_dict["rescaled_true_sigma_arr"],
+    ):
+        # def cdf(x):
+        #     return 0.5 * (1 + erf((x - true_mean) / (true_sigma * np.sqrt(2))))
+        # PDF_true.discretize(cdf, mode = "cdf")
+        # PDF_true.compute_stats()
+        # discrete_BT_loss += [PDF_true.BT_dist(PDF)]
+        # discrete_KL_loss += [PDF_true.KL_div(PDF)]
+
+        PDF.compute_stats()
+        mean, mode, sigma = PDF.mean, PDF.mode, PDF.sigma
+        moment_3 = PDF.compute_moment(3)
+        moment_4 = PDF.compute_moment(4)
+
+        mean_arr.append(mean)
+        mode_arr.append(mode)
+        sigma_arr.append(sigma)
+        moment_3_arr.append(moment_3)
+        moment_4_arr.append(moment_4)
+
+    kurtosis_arr = np.array(moment_4_arr) / np.array(sigma_arr) ** 4
+    statistics = {
+        "mean_arr": np.array(mean_arr),
+        "mode_arr": np.array(mode_arr),
+        "sigma_arr": np.array(sigma_arr),
+        "moment_3_arr": np.array(moment_3_arr),
+        "moment_4_arr": np.array(moment_4_arr),
+        "kurtosis_arr": kurtosis_arr,
+        "kurtosis_error": (kurtosis_arr - 3) ** 2,
+        # 'discrete_BT_loss': np.array(discrete_BT_loss),
+        # 'discrete_KL_loss': np.array(discrete_KL_loss),
+    }
+    return statistics
+
 
 def to_plot_stats(statistics: dict, series_dict: dict, N_dim: int, Number_of_steps: int = 200):
     mode_arr = statistics['mode_arr'][N_dim-1:-1].reshape((-1, N_dim))
