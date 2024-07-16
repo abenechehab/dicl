@@ -9,6 +9,19 @@ from tqdm import tqdm
 import numpy as np
 from numpy.typing import NDArray
 
+from scipy.special import erf
+
+from llmicl.legacy.data.serialize import serialize_arr, SerializerSettings
+from llmicl.matrix_completion.utils import (
+    create_ns,
+    completion_matrix,
+    completion_matrix_ot_breg,
+    bins_completion,
+)
+from llmicl.rl_helpers.rl_utils import (
+    calculate_multiPDF_llama3,
+)
+
 if TYPE_CHECKING:
     from transformers import (
         LlamaForCausalLM,
@@ -17,20 +30,13 @@ if TYPE_CHECKING:
     from gymnasium import Env
     from llmicl.legacy.models.ICL import MultiResolutionPDF
 
-from llmicl.legacy.data.serialize import serialize_arr, SerializerSettings
-# from llmicl.matrix_completion.utils import (
-#     create_ns,
-#     completion_matrix,
-#     completion_matrix_ot_breg,
-#     bins_completion,
-# )
-from llmicl.rl_helpers.rl_utils import (
-    calculate_multiPDF_llama3,
-)
+
 
 @dataclass
 class ICLObject():
-    raw_time_serie: Optional[NDArray[np.float32]] = None
+    time_series: Optional[NDArray[np.float32]] = None
+    mean_series: Optional[NDArray[np.float32]] = None
+    sigma_series: Optional[NDArray[np.float32]] = None
     str_series: Optional[str] = None
     rescaled_true_mean_arr: Optional[NDArray[np.float32]] = None
     rescaled_true_sigma_arr: Optional[NDArray[np.float32]] = None
@@ -45,8 +51,8 @@ class ICLObject():
     moment_4_arr: Optional[NDArray[np.float32]] = None
     kurtosis_arr: Optional[NDArray[np.float32]] = None
     kurtosis_error: Optional[NDArray[np.float32]] = None
-
-
+    discrete_BT_loss: Optional[NDArray[np.float32]] = None
+    discrete_KL_loss: Optional[NDArray[np.float32]] = None
 
 
 class ICLTrainer(ABC):
@@ -115,10 +121,6 @@ class UnivariateICLTrainer(ICLTrainer):
     ):
         self.context_length = context_length
 
-        time_serie = time_series[:self.context_length].flatten()
-        mean_series = mean_series[: self.context_length].flatten()
-        std_series = sigma_series[: self.context_length].flatten()
-
         # ------------------ serialize_gaussian ------------------
         settings = SerializerSettings(
             base=10,
@@ -132,26 +134,31 @@ class UnivariateICLTrainer(ICLTrainer):
         )
 
         if update_min_max:
-            self.icl_object.rescaling_min = time_serie.min()
-            self.icl_object.rescaling_max = time_serie.max()
+            self.icl_object.rescaling_min = time_series[: self.context_length].min()
+            self.icl_object.rescaling_max = time_series[: self.context_length].max()
 
         ts_min = self.icl_object.rescaling_min
         ts_max = self.icl_object.rescaling_max
-        rescaled_array = (time_serie - ts_min) / (
+        rescaled_array = (time_series[: self.context_length] - ts_min) / (
             ts_max - ts_min
         ) * self.rescale_factor + self.up_shift
-        rescaled_true_mean_arr = (np.array(mean_series) - ts_min) / (
+        rescaled_true_mean_arr = (mean_series[: self.context_length] - ts_min) / (
             ts_max - ts_min
         ) * self.rescale_factor + self.up_shift
         rescaled_true_sigma_arr = (
-            np.array(std_series) / (ts_max - ts_min) * self.rescale_factor
+            sigma_series[: self.context_length]
+            / (ts_max - ts_min)
+            * self.rescale_factor
         )
         full_series = serialize_arr(rescaled_array, settings)
 
-        self.icl_object.raw_time_serie = time_serie
+        self.icl_object.time_series = time_series[: self.context_length]
+        self.icl_object.mean_series = mean_series[: self.context_length]
+        self.icl_object.sigma_series = sigma_series[: self.context_length]
         self.icl_object.rescaled_true_mean_arr = rescaled_true_mean_arr
         self.icl_object.rescaled_true_sigma_arr = rescaled_true_sigma_arr
         self.icl_object.str_series = full_series
+
         return self.icl_object
 
     def icl(
@@ -183,7 +190,10 @@ class UnivariateICLTrainer(ICLTrainer):
             PDF.compute_stats()
 
             # Calculate the mode of the PDF
-            next_state = ((PDF.mode - self.up_shift) / self.rescale_factor) * (ts_max - ts_min) + ts_min
+            next_state = (
+                    (PDF.mode - self.up_shift) / self.rescale_factor
+                ) * (ts_max - ts_min) + ts_min
+
             predictions[timestep] = next_state
 
         self.icl_object.predictions = predictions
@@ -191,9 +201,8 @@ class UnivariateICLTrainer(ICLTrainer):
         return self.icl_object
 
     def compute_statistics(self,):
-        PDF_list = self.icl_object.PDF_list
-
-        PDF_true_list = copy.deepcopy(PDF_list)
+        PDF_list: List["MultiResolutionPDF"] = self.icl_object.PDF_list
+        PDF_true_list: List["MultiResolutionPDF"] = copy.deepcopy(PDF_list)
 
         ### Extract statistics from MultiResolutionPDF
         mean_arr = []
@@ -201,18 +210,21 @@ class UnivariateICLTrainer(ICLTrainer):
         sigma_arr = []
         moment_3_arr = []
         moment_4_arr = []
+        discrete_BT_loss = []
+        discrete_KL_loss = []
         for PDF, PDF_true, true_mean, true_sigma in zip(
             PDF_list,
             PDF_true_list,
             self.icl_object.rescaled_true_mean_arr,
             self.icl_object.rescaled_true_sigma_arr,
         ):
-            # def cdf(x):
-            #     return 0.5 * (1 + erf((x - true_mean) / (true_sigma * np.sqrt(2))))
-            # PDF_true.discretize(cdf, mode = "cdf")
-            # PDF_true.compute_stats()
-            # discrete_BT_loss += [PDF_true.BT_dist(PDF)]
-            # discrete_KL_loss += [PDF_true.KL_div(PDF)]
+            def cdf(x):
+                return 0.5 * (1 + erf((x - true_mean) / (true_sigma * np.sqrt(2))))
+
+            PDF_true.discretize(cdf, mode = "cdf")
+            PDF_true.compute_stats()
+            discrete_BT_loss.append([PDF_true.BT_dist(PDF)])
+            discrete_KL_loss.append([PDF_true.KL_div(PDF)])
 
             PDF.compute_stats()
             mean, mode, sigma = PDF.mean, PDF.mode, PDF.sigma
@@ -234,21 +246,26 @@ class UnivariateICLTrainer(ICLTrainer):
         self.icl_object.moment_4_arr = np.array(moment_4_arr)
         self.icl_object.kurtosis_arr = kurtosis_arr
         self.icl_object.kurtosis_error = (kurtosis_arr - 3) ** 2
+        self.icl_object.discrete_BT_loss = np.array(discrete_BT_loss)
+        self.icl_object.discrete_KL_loss = np.array(discrete_KL_loss)
+
         return self.icl_object
 
-    def build_tranistion_matrices(self, reg: float = 5e-3):
-        # for dim in range(self.n_observations):
-        #     comma_locations = np.sort(np.where(np.array(list(self.in_context_series[dim]['full_series'])) == ',')[0])
-        #     ns = create_ns(self.in_context_series[dim]['full_series'], comma_locations)
-        #     bins_ = bins_completion(self.in_context_series[dim]['PDF_list'])
+    def build_tranistion_matrices(self, reg: float = 5e-3, verbose: int = 0):
+        comma_locations = np.sort(
+            np.where(np.array(list(self.icl_object.str_series)) == ",")[0]
+        )
+        ns = create_ns(self.icl_object.str_series, comma_locations)
+        bins_ = bins_completion(self.icl_object.PDF_list)
 
-        #     p_ot, _ = completion_matrix_ot_breg(bins_, ns, statistics['discrete_BT_loss'], reg=reg)
-        #     p_nn, _ = completion_matrix(bins_, ns, statistics['discrete_BT_loss'])
+        p_ot, _ = completion_matrix_ot_breg(
+            bins_, ns, self.icl_object.discrete_BT_loss, reg=reg, verbose=verbose
+        )
+        p_nn, _ = completion_matrix(bins_, ns, self.icl_object.discrete_BT_loss)
 
-        #     self.transition_matrix_NN[dim] = p_nn
-        #     self.transition_matrix_OT[dim] = p_ot
-        # return self.transition_matrix_NN, self.transition_matrix_OT
-        return None
+        self.transition_matrix_NN = p_nn
+        self.transition_matrix_OT = p_ot
+        return self.transition_matrix_NN, self.transition_matrix_OT
 
     def predict_long_horizon_llm(self, state: np.array, h: int, temperature: float = 1.0):
         # """
@@ -296,12 +313,14 @@ class RLICLTrainer(ICLTrainer):
         ]
 
         self.transition_matrix_baseline = None
-        self.transition_matrix_NN = None
-        self.transition_matrix_OT = None
+        self.transition_matrix_NN: Optional[List[NDArray[np.float32]]] = []
+        self.transition_matrix_OT: Optional[List[NDArray[np.float32]]] = []
 
     def update_context(
         self,
         time_series: NDArray[np.float32],
+        mean_series: NDArray[np.float32],
+        sigma_series: NDArray[np.float32],
         context_length: int = 100,
         update_min_max: bool = True,
     ):
@@ -309,32 +328,36 @@ class RLICLTrainer(ICLTrainer):
         assert len(time_series.shape) > 1 and time_series.shape[1]==self.n_observations, f"Not all observations are given in time series of shape: {time_series}"
 
         for dim in range(self.n_observations):
-            time_serie = time_series[:self.context_length,dim].flatten()
-            # print(f"update_cntext | dim:{dim} | updated_series: {len(time_series)}")
-            mean_series = copy.copy(time_serie)
-            std_series = np.zeros_like(mean_series)
-
             # ------------------ serialize_gaussian ------------------
             settings = SerializerSettings(base=10, prec=2, signed=True, time_sep=',', bit_sep='', minus_sign='-', fixed_length=False, max_val = 10)
-            time_serie = np.array(time_serie)
 
             if update_min_max:
-                self.icl_object[dim].rescaling_min = time_serie.min()
-                self.icl_object[dim].rescaling_max = time_serie.max()
+                self.icl_object[dim].rescaling_min = time_series[
+                    : self.context_length, dim
+                ].min()
+                self.icl_object[dim].rescaling_max = time_series[
+                    : self.context_length, dim
+                ].max()
 
-            ts_min = self.icl_object[dim].rescaling_min
-            ts_max = self.icl_object[dim].rescaling_max
-            rescaled_array = (time_serie - ts_min) / (
-                ts_max - ts_min) * self.rescale_factor + self.up_shift
-            rescaled_true_mean_arr = (np.array(mean_series) - ts_min) / (
-                ts_max - ts_min) * self.rescale_factor + self.up_shift
+            ts_min = copy.copy(self.icl_object[dim].rescaling_min)
+            ts_max = copy.copy(self.icl_object[dim].rescaling_max)
+            rescaled_array = (time_series[: self.context_length, dim] - ts_min) / (
+                ts_max - ts_min
+            ) * self.rescale_factor + self.up_shift
+            rescaled_true_mean_arr = (
+                mean_series[: self.context_length, dim] - ts_min
+            ) / (ts_max - ts_min) * self.rescale_factor + self.up_shift
             rescaled_true_sigma_arr = (
-                np.array(std_series) / (ts_max - ts_min) * self.rescale_factor
+                sigma_series[: self.context_length, dim]
+                / (ts_max - ts_min)
+                * self.rescale_factor
             )
 
             full_series = serialize_arr(rescaled_array, settings)
 
-            self.icl_object[dim].raw_time_serie = time_series
+            self.icl_object[dim].time_series = time_series[: self.context_length, dim]
+            self.icl_object[dim].mean_series = mean_series[: self.context_length, dim]
+            self.icl_object[dim].sigma_series = sigma_series[: self.context_length, dim]
             self.icl_object[dim].rescaled_true_mean_arr = rescaled_true_mean_arr
             self.icl_object[dim].rescaled_true_sigma_arr = rescaled_true_sigma_arr
             self.icl_object[dim].str_series = full_series
@@ -348,8 +371,11 @@ class RLICLTrainer(ICLTrainer):
         verbose: int = 0,
     ):
         self.use_cache = use_cache
-        predictions = np.zeros((self.context_length, self.n_observations))
-        for dim in tqdm(range(self.n_observations), desc="icl / state dim", disable=not bool(verbose)):
+        for dim in tqdm(
+            range(self.n_observations),
+            desc="icl / state dim",
+            disable=not bool(verbose)
+        ):
             PDF_list, _, kv_cache = calculate_multiPDF_llama3(
                 self.icl_object[dim].str_series,
                 model=self.model,
@@ -364,15 +390,16 @@ class RLICLTrainer(ICLTrainer):
             ts_min = self.icl_object[dim].rescaling_min
             ts_max = self.icl_object[dim].rescaling_max
 
+            predictions = []
             for timestep in range(len(PDF_list)):
                 PDF: "MultiResolutionPDF" = PDF_list[timestep]
                 PDF.compute_stats()
 
                 # Calculate the mode of the PDF
                 next_state = ((PDF.mode - self.up_shift) / self.rescale_factor) * (ts_max - ts_min) + ts_min
-                predictions[timestep, dim] = next_state
+                predictions.append(next_state)
 
-            self.icl_object[dim].predictions = predictions[:, dim]
+            self.icl_object[dim].predictions = np.array(predictions)
 
         return self.icl_object
 
@@ -388,18 +415,20 @@ class RLICLTrainer(ICLTrainer):
             sigma_arr = []
             moment_3_arr = []
             moment_4_arr = []
+            discrete_BT_loss = []
+            discrete_KL_loss = []
             for PDF, PDF_true, true_mean, true_sigma in zip(
                 PDF_list,
                 PDF_true_list,
                 self.icl_object[dim].rescaled_true_mean_arr,
                 self.icl_object[dim].rescaled_true_sigma_arr,
             ):
-                # def cdf(x):
-                #     return 0.5 * (1 + erf((x - true_mean) / (true_sigma * np.sqrt(2))))
-                # PDF_true.discretize(cdf, mode = "cdf")
-                # PDF_true.compute_stats()
-                # discrete_BT_loss += [PDF_true.BT_dist(PDF)]
-                # discrete_KL_loss += [PDF_true.KL_div(PDF)]
+                def cdf(x):
+                    return 0.5 * (1 + erf((x - true_mean) / (true_sigma * np.sqrt(2))))
+                PDF_true.discretize(cdf, mode = "cdf")
+                PDF_true.compute_stats()
+                discrete_BT_loss.append(PDF_true.BT_dist(PDF))
+                discrete_KL_loss.append(PDF_true.KL_div(PDF))
 
                 PDF.compute_stats()
                 mean, mode, sigma = PDF.mean, PDF.mode, PDF.sigma
@@ -421,33 +450,110 @@ class RLICLTrainer(ICLTrainer):
             self.icl_object[dim].moment_4_arr = np.array(moment_4_arr)
             self.icl_object[dim].kurtosis_arr = kurtosis_arr
             self.icl_object[dim].kurtosis_error = (kurtosis_arr - 3) ** 2
+            self.icl_object[dim].discrete_BT_loss = np.array(discrete_BT_loss)
+            self.icl_object[dim].discrete_KL_loss = np.array(discrete_KL_loss)
         return self.icl_object
 
-    def build_tranistion_matrices(self, reg: float = 5e-3):
-        # for dim in range(self.n_observations):
-        #     comma_locations = np.sort(np.where(np.array(list(self.in_context_series[dim]['full_series'])) == ',')[0])
-        #     ns = create_ns(self.in_context_series[dim]['full_series'], comma_locations)
-        #     bins_ = bins_completion(self.in_context_series[dim]['PDF_list'])
+    def build_tranistion_matrices(self, reg: float = 5e-3, verbose: int = 0):
+        self.transition_matrix_NN = []
+        self.transition_matrix_OT = []
+        for dim in tqdm(range(self.n_observations), desc="icl / state dim"):
+            comma_locations = np.sort(
+                np.where(np.array(list(self.icl_object[dim].str_series)) == ",")[0]
+            )
+            ns = create_ns(self.icl_object[dim].str_series, comma_locations)
+            bins_ = bins_completion(self.icl_object[dim].PDF_list)
 
-        #     p_ot, _ = completion_matrix_ot_breg(bins_,ns,statistics['discrete_BT_loss'], reg=reg)
-        #     p_nn, _ = completion_matrix(bins_,ns,statistics['discrete_BT_loss'])
+            p_ot, _ = completion_matrix_ot_breg(
+                bins_,
+                ns,
+                self.icl_object[dim].discrete_BT_loss,
+                reg=reg,
+                verbose=verbose,
+            )
+            p_nn, _ = completion_matrix(
+                bins_, ns, self.icl_object[dim].discrete_BT_loss
+            )
 
-        #     self.transition_matrix_NN[dim] = p_nn
-        #     self.transition_matrix_OT[dim] = p_ot
-        # return self.transition_matrix_NN, self.transition_matrix_OT
-        return
+            self.transition_matrix_NN.append(p_nn)
+            self.transition_matrix_OT.append(p_ot)
+        return self.transition_matrix_NN, self.transition_matrix_OT
 
-    def predict_long_horizon_llm(self, state: np.array, h: int, temperature: float = 1.0):
-        # """
-        # Predict h steps into the future by appending the previous prediction to the time series.
-        # """
-        # future_states = np.zeros((h, self.n_observations))
-        # current_state = state.copy()
+    def predict_long_horizon_llm(
+            self, prediction_horizon: int, temperature: float = 1.0):
+        """
+        Predict h steps into the future by appending the previous prediction to the time series.
+        """
+        last_prediction = copy.copy(np.concatenate(
+            [
+                self.icl_object[dim].predictions[-1].reshape((1, 1))
+                for dim in range(self.n_observations)
+            ],
+            axis=1,
+        ))
 
-        # for step in tqdm(range(h), desc="prediction horizon"):
-        #     next_state = self.predict_llm(current_state, temperature)
-        #     future_states[step] = next_state
-        #     current_state = next_state  # Use the predicted state as the new current state for the next step
+        current_ts = copy.copy(np.concatenate(
+            [
+                self.icl_object[dim].time_series.reshape((-1, 1))
+                for dim in range(self.n_observations)
+            ],
+            axis=1,
+        ))
+        for h in tqdm(range(prediction_horizon), desc="prediction_horizon"):
+            input_time_series = np.concatenate([current_ts, last_prediction], axis=0)
 
-        # return future_states
-        return
+            self.update_context(
+                time_series=input_time_series,
+                mean_series=copy.copy(input_time_series),
+                sigma_series=np.zeros_like(input_time_series),
+                context_length=self.context_length + h + 1,
+                update_min_max=False,  # if False, predictions get out of bounds
+            )
+            self.icl(temperature=temperature, verbose=0)
+
+            current_ts = np.concatenate([current_ts, last_prediction], axis=0)
+
+            last_prediction = copy.copy(np.concatenate(
+                [
+                    self.icl_object[dim].predictions[-1].reshape((1, 1))
+                    for dim in range(self.n_observations)
+                ],
+                axis=1,
+            ))
+
+        return self.compute_statistics()
+
+    def predict_long_horizon_MC(
+        self,
+        prediction_horizon: int,
+    ):
+        """
+        Predict h steps into the future by rolling out the MC.
+        """
+        predictions = np.zeros(
+            (self.context_length + prediction_horizon, self.n_observations)
+        )
+
+        # predictions for the time serie in context
+        for dim in range(self.n_observations):
+            ts_min = copy.copy(self.icl_object[dim].rescaling_min)
+            ts_max = copy.copy(self.icl_object[dim].rescaling_max)
+            for index, state in enumerate(self.icl_object[dim].str_series.split(',')[:-1]):
+                next_state_dist = self.transition_matrix_OT[dim][int(state)]
+
+                next_state = np.argmax(next_state_dist)
+
+                predictions[index, dim] = (((next_state / 100) - self.up_shift) / self.rescale_factor) * (
+                    ts_max - ts_min
+                ) + ts_min
+
+            for h in range(self.context_length, self.context_length + prediction_horizon):
+                next_state_dist = self.transition_matrix_OT[dim][next_state]
+
+                next_state = np.argmax(next_state_dist)
+
+                predictions[h, dim] = (((next_state / 100) - self.up_shift) / self.rescale_factor) * (
+                    ts_max - ts_min
+                ) + ts_min
+
+        return predictions
