@@ -107,7 +107,7 @@ def completion_matrix_ot(bins, ns, loss):
     P[:149], P[850:] = [one_prob_return(1000,150)] * 149, [one_prob_return(1000,849)] * 150
     return P, values_and_losses
 
-def completion_matrix_ot_breg(bins, ns, loss, reg):
+def completion_matrix_ot_breg(bins, ns, loss, reg, verbose=0):
     # bins = [(width, height, center)] * 1000
     P = np.zeros((1000,1000))
     values_and_losses = {}
@@ -121,18 +121,12 @@ def completion_matrix_ot_breg(bins, ns, loss, reg):
                 bin_list = bin2list(bins[idx])
                 P[tok] = bin_list
                 values_and_losses[tok] = loss[idx]
-    print(f"after filling: {np.sum(np.isnan(P))}")
     for idx in range(149,850):
         P[idx][:149], P[idx][850:] = [0.0] * 149, [0.0] * 150
-    print(f"fill borders: {np.sum(np.isnan(P))}")
     P = simple_normalize(P)
-    print(f"after normalize: {np.sum(np.isnan(P))}")
     P[:149], P[850:] = [one_prob_return(1000,150)] * 149, [one_prob_return(1000,849)] * 150
-    print(f"fill borders 2: {np.sum(np.isnan(P))}")
-    interpolate_wass_barycenter_breg(P, values_and_losses, reg=reg)
-    print(f"after ot: {np.sum(np.isnan(P))}")
+    interpolate_wass_barycenter_breg(P, values_and_losses, reg=reg, verbose=verbose)
     P = simple_normalize(P)
-    print(f"after last normalize: {np.sum(np.isnan(P))}")
     return P, values_and_losses
 
 # def completion_matrix_ot_breg_from_matrix(P, reg):
@@ -151,9 +145,9 @@ def interpolate_wass_barycenter(P, hashmap, reg, reg_m):
         distribs = compute_wass_bar_unbalanced(p1, p2, n_weight, reg, reg_m)
         P[sorted_keys[i]: sorted_keys[i+1]] = distribs.T
 
-def interpolate_wass_barycenter_breg(P, hashmap, reg):
+def interpolate_wass_barycenter_breg(P, hashmap, reg, verbose=0):
     sorted_keys = sorted(hashmap.keys())
-    for i in tqdm(range(len(sorted_keys)-1)):
+    for i in tqdm(range(len(sorted_keys) - 1), disable=not bool(verbose)):
         n_weight = sorted_keys[i+1] - sorted_keys[i]
         if n_weight ==1: continue
         p1 = P[sorted_keys[i]]
