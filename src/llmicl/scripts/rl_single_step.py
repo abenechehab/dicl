@@ -15,7 +15,7 @@ from llmicl.rl_helpers.rl_utils import load_offline_dataset
 
 DEFAULT_ENV_NAME: str = "HalfCheetah"
 DEFAULT_TRIAL_NAME: str = "test"
-DEFAULT_DATA_LABEL: str = "expert"
+DEFAULT_DATA_LABEL: str = "d4rl_expert"
 DEFAULT_DATA_PATH: str = "/home/abenechehab/d4rl"
 DEFAULT_CONTEXT_LENGTH: int = 500
 DEFAULT_INIT_INDEX: int = 0
@@ -99,7 +99,7 @@ model.eval()
 # ----------------------------------------------------------------------------------
 
 # ------------------------------ generate time series ------------------------------
-data_path = f"{args.data_path}/{args.env_name}/d4rl_{args.data_label}/X_test.csv"
+data_path = f"{args.data_path}/{args.env_name}/{args.data_label}/X_test.csv"
 X, _, n_observations, n_actions = load_offline_dataset(path=data_path)
 
 time_series = X[
@@ -132,7 +132,10 @@ icl_object = trainer.compute_statistics()
 # ----------------------------------------------------------------------------------
 
 # ------------------------------ Visualization ------------------------------
-f, axes = plt.subplots(6, 3, figsize=(20, 20), gridspec_kw={"wspace": 0.3}, sharex=True)
+n_rows = (n_observations // 3) + 1
+f, axes = plt.subplots(
+    n_rows, 3, figsize=(20, 20), gridspec_kw={"wspace": 0.3}, sharex=True
+)
 axes = list(np.array(axes).flatten())
 for dim in range(n_observations):
     groundtruth = X[
@@ -160,12 +163,12 @@ for dim in range(n_observations):
     axes[dim].fill_between(x=x, y1=mean_arr - sigma_arr, y2=mean_arr + sigma_arr)
     axes[dim].plot(x, groundtruth, label="gt", color="red")
     axes[dim].set_title(f"{dim}")
-    if dim > 15:
+    if dim >= ((n_observations // 3) * 3):
         axes[dim].set_xlabel("timesteps")
 axes[dim].legend()
 plt.savefig(
     "/home/abenechehab/llmicl/src/llmicl/artifacts/figures/"
-        f"{args.env_name}_{args.data_label}_{args.trial_name}.png"
+        f"{args.env_name}_{args.data_label}_{args.trial_name}_{args.init_index}.png"
 )
 plt.show()
 # ----------------------------------------------------------------------------------
