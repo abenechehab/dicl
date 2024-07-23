@@ -13,3 +13,5 @@ figures/BM_kurtosis_temp1.png
 figures/brownian_motion.png
 
 *.egg-info/
+
+artifacts/
