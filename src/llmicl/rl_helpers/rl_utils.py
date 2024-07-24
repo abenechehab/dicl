@@ -156,9 +156,7 @@ def gym_generate_random_policy(env: gym.Env, Number_of_steps: int = 200, seed: i
 
 def load_offline_dataset(path: str):
     X = pd.read_csv(path, index_col=0)
-    N_observations = 17
-    N_actions = 6
-    return X.values.astype('float'), X.columns, N_observations, N_actions
+    return X.values.astype('float')
 
 def make_RL_time_serie(
     X: np.array,
