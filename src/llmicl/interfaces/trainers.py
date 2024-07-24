@@ -298,7 +298,10 @@ class RLICLTrainer(ICLTrainer):
         self.tokenizer: "AutoTokenizer" = tokenizer
 
         self.n_observations: int = env.observation_space.shape[0]
-        self.n_actions: int = env.action_space.shape[0]
+        if len(env.action_space.shape) == 0:
+            self.n_actions: int = 1
+        else:
+            self.n_actions: int = env.action_space.shape[0]
 
         self.use_cache: bool = False
 
@@ -325,7 +328,7 @@ class RLICLTrainer(ICLTrainer):
         update_min_max: bool = True,
     ):
         self.context_length = context_length
-        assert len(time_series.shape) > 1 and time_series.shape[1]==self.n_observations, f"Not all observations are given in time series of shape: {time_series}"
+        assert len(time_series.shape) > 1 and time_series.shape[1]==self.n_observations, f"Not all observations are given in time series of shape: {time_series.shape}"
 
         for dim in range(self.n_observations):
             # ------------------ serialize_gaussian ------------------
