@@ -287,21 +287,18 @@ class UnivariateICLTrainer(ICLTrainer):
 class RLICLTrainer(ICLTrainer):
     def __init__(
         self,
-        env: "Env",
         model: "LlamaForCausalLM",
         tokenizer: "AutoTokenizer",
+        n_observations: int,
+        n_actions: int,
         rescale_factor: float = 7.0,
         up_shift: float = 1.5,
     ):
-        self.env: "Env" = env
         self.model: "LlamaForCausalLM" = model
         self.tokenizer: "AutoTokenizer" = tokenizer
 
-        self.n_observations: int = env.observation_space.shape[0]
-        if len(env.action_space.shape) == 0:
-            self.n_actions: int = 1
-        else:
-            self.n_actions: int = env.action_space.shape[0]
+        self.n_observations: int = n_observations
+        self.n_actions: int = n_actions
 
         self.use_cache: bool = False
 
