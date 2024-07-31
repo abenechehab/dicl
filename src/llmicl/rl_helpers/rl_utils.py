@@ -13,11 +13,27 @@ from sklearn.preprocessing import MinMaxScaler
 
 import gymnasium as gym
 
+from dm_control import suite
+
 from llmicl.legacy.data.serialize import serialize_arr, SerializerSettings
 
 if TYPE_CHECKING:
     from llmicl.interfaces.trainers import ICLObject
 # -------------------------------------------------------------------------
+
+def create_env(env_name: str):
+    if env_name=="CartPole":
+        env = suite.load(domain_name="cartpole", task_name="swingup")
+        return env, 5, 1
+    else:
+        env = gym.make(env_name)
+        n_observations: int = env.observation_space.shape[0]
+        if len(env.action_space.shape) == 0:
+            n_actions: int = 1
+        else:
+            n_actions: int = env.action_space.shape[0]
+        return env, n_observations, n_actions
+
 
 def calculate_multiPDF_llama3(
     full_series, model, tokenizer, n_states=1000, temperature=1.0, number_of_tokens_original=None, use_cache=False, kv_cache_prev=None,
