@@ -1,5 +1,6 @@
 import argparse  # noqa: D100
 from tqdm import tqdm
+from pathlib import Path
 
 import copy
 import numpy as np
@@ -11,10 +12,8 @@ from sklearn.linear_model import LinearRegression
 import torch
 from transformers import LlamaForCausalLM, AutoTokenizer
 
-import gymnasium as gym
-
 from llmicl.interfaces import trainers
-from llmicl.rl_helpers.rl_utils import load_offline_dataset
+from llmicl.rl_helpers.rl_utils import load_offline_dataset, create_env
 from llmicl.rl_helpers import nn_utils
 
 
@@ -23,11 +22,12 @@ DEFAULT_TRIAL_NAME: str = "test"
 DEFAULT_DATA_LABEL: str = "random"
 DEFAULT_DATA_PATH: str = "/home/abenechehab/datasets"
 DEFAULT_CONTEXT_LENGTH: int = 500
-DEFAULT_INIT_INDEX: int = 0
 DEFAULT_VERBOSE: int = 0
 DEFAULT_PREDICTION_HORIZON: int = 20
 DEFAULT_START_FROM: int = 0
-DEFAULT_USE_LLM: bool = False
+DEFAULT_USE_MC: bool = False
+DEFAULT_N_EXPERIMENTS: int = 5
+DEFAULT_TRAINING_DATA_SIZE: int = 500
 
 
 # -------------------- Parse arguments --------------------
@@ -93,12 +93,28 @@ parser.add_argument(
     default=DEFAULT_START_FROM,
 )
 parser.add_argument(
-    "--use_llm",
-    metavar="use_llm",
+    "--use_mc",
+    metavar="use_mc",
     type=bool,
-    help="if True, the llm will be used for multi-step prediction, otherwise it's the "
-    "estimated Markov Chain (by multiplication)",
-    default=DEFAULT_USE_LLM,
+    help="if True, in addition to the llm, the estimated Markov Chain will be used for"
+        "multi-step prediction",
+    default=DEFAULT_USE_MC,
+)
+parser.add_argument(
+    "--n_experiments",
+    metavar="n_experiments",
+    type=int,
+    help="the number of experiments to conduct (number of episodes from the test "
+        "dataset to consider)",
+    default=DEFAULT_N_EXPERIMENTS,
+)
+parser.add_argument(
+    "--training_data_size",
+    metavar="training_data_size",
+    type=int,
+    help="the number of experiments to conduct (number of episodes from the test "
+    "dataset to consider)",
+    default=DEFAULT_TRAINING_DATA_SIZE,
 )
 
 args = parser.parse_args()
@@ -120,17 +136,11 @@ model = LlamaForCausalLM.from_pretrained(
 print("finish loading model")
 model.eval()
 # ----------------------------------------------------------------------------------
+print(f"---------- Env {args.env_name} ----------")
 rescale_factor = 7.0
 up_shift = 1.5
-n_experiments = 19
-training_data_size = 500
 
-env = gym.make(args.env_name)
-n_observations: int = env.observation_space.shape[0]
-if len(env.action_space.shape) == 0:
-    n_actions: int = 1
-else:
-    n_actions: int = env.action_space.shape[0]
+_, n_observations, n_actions = create_env(args.env_name)
 
 columns = ["prediction", "model", "dataset", "episode"]
 df = pd.DataFrame(columns=columns)
@@ -138,88 +148,151 @@ for dataset_name in args.data_label:
     # ------------------------------ generate time series ------------------------------
     data_path = f"{args.data_path}/{args.env_name}/{dataset_name}/X_test.csv"
     X = load_offline_dataset(path=data_path)
+    # get episode start indexes
+    restart_index = n_observations+n_actions+1
+    restarts = X[:, restart_index]
+    episode_starts = np.where(restarts)[0]
+    assert args.n_experiments <= len(
+        episode_starts
+    ), f"n experiments {args.n_experiments} bigger than "
+    f"n episodes {len(episode_starts)}!!"
     # ----------------------------------------------------------------------------------
 
     # ------------------------------ ICL ------------------------------
     all_mean_predictions = np.zeros(
         (args.context_length + args.prediction_horizon, n_observations)
     )
-    llm_errors = np.zeros((args.context_length + args.prediction_horizon, n_experiments))
-    mc_errors = np.zeros((args.context_length + args.prediction_horizon, n_experiments))
-    for i_exp in tqdm(range(n_experiments), desc="nbr of experiments"):
-        init_index = int(i_exp * 1000)
-        time_series = X[init_index : init_index + args.context_length, :n_observations]
+    # TODO: replace absolute paths with a variable
+    if Path( "/home/abenechehab/llmicl/src/llmicl/artifacts/data/"
+            f"{args.env_name}_{dataset_name}_{args.trial_name}_"
+            f"llm_errors.npy").exists():
+        llm_errors = np.load(
+            "/home/abenechehab/llmicl/src/llmicl/artifacts/data/"
+            f"{args.env_name}_{dataset_name}_{args.trial_name}_"
+            f"llm_errors.npy"
+        )
+        if Path( "/home/abenechehab/llmicl/src/llmicl/artifacts/data/"
+            f"{args.env_name}_{dataset_name}_{args.trial_name}_"
+            f"mc_errors.npy").exists():
+            mc_errors = np.load(
+                "/home/abenechehab/llmicl/src/llmicl/artifacts/data/"
+                f"{args.env_name}_{dataset_name}_{args.trial_name}_"
+                f"mc_errors.npy"
+            )
+    else:
+        llm_errors = np.zeros(
+            (args.context_length + args.prediction_horizon, args.n_experiments)
+        )
+        if args.use_mc:
+            mc_errors = np.zeros(
+                (args.context_length + args.prediction_horizon, args.n_experiments)
+            )
 
-        trainer = trainers.RLICLTrainer(
-            env=env,
-            model=model,
-            tokenizer=tokenizer,
-            rescale_factor=rescale_factor,
-            up_shift=up_shift,
-        )
-        trainer.update_context(
-            time_series=copy.copy(time_series),
-            mean_series=copy.copy(time_series),
-            sigma_series=np.zeros_like(time_series),
-            context_length=args.context_length,
-            update_min_max=True,
-        )
-        trainer.icl(verbose=0)
+        for i_exp in tqdm(range(args.n_experiments), desc="nbr of experiments"):
+            init_index = episode_starts[i_exp]
 
-        # -------- Markov chain --------
-        trainer.compute_statistics()
-        trainer.build_tranistion_matrices(verbose=0)
-        mc_predictions = trainer.predict_long_horizon_MC(
-            prediction_horizon=args.prediction_horizon,
-        )
-        mc_errors[:, i_exp] = np.linalg.norm(
-            X[
-                init_index + 1 : init_index
-                + args.context_length
-                + 1
-                + args.prediction_horizon,
-                :n_observations,
+            time_series = X[
+                init_index : init_index + args.context_length, :n_observations
             ]
-            - mc_predictions,
-            axis=1,
-        )
 
-        # -------- LLM --------
-        icl_object = trainer.predict_long_horizon_llm(
-            prediction_horizon=args.prediction_horizon
-        )
-
-        llm_predictions = np.zeros(
-            (args.context_length + args.prediction_horizon, n_observations)
-        )
-        for dim in range(n_observations):
-            groundtruth = X[
-                init_index + 1 : init_index
+            # double-check for nan
+            check_nan_with_actions = X[
+                init_index : init_index
                 + args.context_length
                 + 1
                 + args.prediction_horizon,
-                dim,
-            ].flatten()
-            size_all = len(groundtruth)
-
-            ts_max = icl_object[dim].rescaling_max
-            ts_min = icl_object[dim].rescaling_min
-
-            mode_arr = (
-                (icl_object[dim].mode_arr.flatten() - up_shift) / rescale_factor
-            ) * (ts_max - ts_min) + ts_min
-            all_mean_predictions[:, dim] = mode_arr
-
-        llm_errors[:, i_exp] = np.linalg.norm(
-            X[
-                init_index + 1 : init_index
-                + args.context_length
-                + 1
-                + args.prediction_horizon,
-                :n_observations,
+                : n_observations + n_actions,
             ]
-            - all_mean_predictions,
-            axis=1,
+            if np.sum(np.isnan(check_nan_with_actions)) > 0:
+                raise ValueError(
+                    f"nan actions selected at indices "
+                    f" {np.where(np.isnan(check_nan_with_actions))}"
+                )
+
+            trainer = trainers.RLICLTrainer(
+                model=model,
+                tokenizer=tokenizer,
+                n_observations=n_observations,
+                n_actions=n_actions,
+                rescale_factor=rescale_factor,
+                up_shift=up_shift,
+            )
+            trainer.update_context(
+                time_series=copy.copy(time_series),
+                mean_series=copy.copy(time_series),
+                sigma_series=np.zeros_like(time_series),
+                context_length=args.context_length,
+                update_min_max=True,
+            )
+            trainer.icl(verbose=0)
+
+            if args.use_mc:
+            # -------- Markov chain --------
+                trainer.compute_statistics()
+                trainer.build_tranistion_matrices(verbose=0)
+                mc_predictions = trainer.predict_long_horizon_MC(
+                    prediction_horizon=args.prediction_horizon,
+                )
+                mc_errors[:, i_exp] = np.linalg.norm(
+                    X[
+                        init_index + 1 : init_index
+                        + args.context_length
+                        + 1
+                        + args.prediction_horizon,
+                        :n_observations,
+                    ]
+                    - mc_predictions,
+                    axis=1,
+                )
+
+            # -------- LLM --------
+            icl_object = trainer.predict_long_horizon_llm(
+                prediction_horizon=args.prediction_horizon
+            )
+
+            llm_predictions = np.zeros(
+                (args.context_length + args.prediction_horizon, n_observations)
+            )
+            for dim in range(n_observations):
+                groundtruth = X[
+                    init_index + 1 : init_index
+                    + args.context_length
+                    + 1
+                    + args.prediction_horizon,
+                    dim,
+                ].flatten()
+                size_all = len(groundtruth)
+
+                ts_max = icl_object[dim].rescaling_max
+                ts_min = icl_object[dim].rescaling_min
+
+                mode_arr = (
+                    (icl_object[dim].mode_arr.flatten() - up_shift) / rescale_factor
+                ) * (ts_max - ts_min) + ts_min
+                all_mean_predictions[:, dim] = mode_arr
+
+            llm_errors[:, i_exp] = np.linalg.norm(
+                X[
+                    init_index + 1 : init_index
+                    + args.context_length
+                    + 1
+                    + args.prediction_horizon,
+                    :n_observations,
+                ]
+                - all_mean_predictions,
+                axis=1,
+            )
+
+    # ---------------- save predictions ----------------
+    models = ["llm"]
+    if args.use_mc:
+        models.append("mc")
+    for m in models:
+        np.save(
+            "/home/abenechehab/llmicl/src/llmicl/artifacts/data/"
+            f"{args.env_name}_{dataset_name}_{args.trial_name}_"
+            f"{m}_errors.npy",
+            eval(f"{m}_errors"),
         )
 
     # train linear regression baseline and MLP
@@ -231,11 +304,11 @@ for dataset_name in args.data_label:
         np.concatenate(
             [
                 X_baselines[:, :n_observations],
-                X_baselines[:, n_observations + 1 : n_observations + 1 + n_actions],
+                X_baselines[:, n_observations : n_observations + n_actions],
             ],
             axis=1,
         )[:-1]
-    )
+    )  # TODO: halfcheetah have obs_reward as additional obs
     X_train = copy.copy(X_baselines[:-1, :n_observations])
     y_train = copy.copy(X_baselines[1:, :n_observations])
 
@@ -243,9 +316,9 @@ for dataset_name in args.data_label:
     mask = np.ones(X_train_actions.shape[0], bool)
     mask[nan_indices] = False
 
-    X_train = X_train[mask][:training_data_size]
-    X_train_actions = X_train_actions[mask][:training_data_size]
-    y_train = y_train[mask][:training_data_size]
+    X_train = X_train[mask][: args.training_data_size]
+    X_train_actions = X_train_actions[mask][: args.training_data_size]
+    y_train = y_train[mask][: args.training_data_size]
 
     # linreg model
     linreg_model = LinearRegression(fit_intercept=True)
@@ -268,22 +341,37 @@ for dataset_name in args.data_label:
 
     # constant and linreg baselines
     cst_errors = np.zeros(
-        (args.context_length + args.prediction_horizon, n_experiments)
+        (args.context_length + args.prediction_horizon, args.n_experiments)
     )
     linreg_errors = np.zeros(
-        (args.context_length + args.prediction_horizon, n_experiments)
+        (args.context_length + args.prediction_horizon, args.n_experiments)
     )
     linreg_actions_errors = np.zeros(
-        (args.context_length + args.prediction_horizon, n_experiments)
+        (args.context_length + args.prediction_horizon, args.n_experiments)
     )
     mlp_errors = np.zeros(
-        (args.context_length + args.prediction_horizon, n_experiments)
+        (args.context_length + args.prediction_horizon, args.n_experiments)
     )
     mlp_actions_errors = np.zeros(
-        (args.context_length + args.prediction_horizon, n_experiments)
+        (args.context_length + args.prediction_horizon, args.n_experiments)
     )
-    for i_exp in tqdm(range(n_experiments), desc="nbr of experiments"):
-        init_index = int(i_exp * 1000)
+    for i_exp in tqdm(range(args.n_experiments), desc="nbr of experiments"):
+        init_index = episode_starts[i_exp]
+
+        # double-check for nan
+        check_nan_with_actions = X[
+            init_index : init_index
+            + args.context_length
+            + 1
+            + args.prediction_horizon,
+            : n_observations + n_actions,
+        ]
+        if np.sum(np.isnan(check_nan_with_actions)) > 0:
+            raise ValueError(
+                f"nan actions selected at indices "
+                f" {np.where(np.isnan(check_nan_with_actions))}"
+            )
+
         # constant
         cst_pred = copy.copy(
             X[
@@ -307,23 +395,10 @@ for dataset_name in args.data_label:
         )
 
         # linear actions
-        linreg_input_actions = np.concatenate(
-            [
-                X[
-                    init_index : init_index
-                    + args.context_length
-                    + args.prediction_horizon,
-                    :n_observations,
-                ],
-                X[
-                    init_index : init_index
-                    + args.context_length
-                    + args.prediction_horizon,
-                    n_observations + 1 : n_observations + 1 + n_actions,
-                ],
-            ],
-            axis=1,
-        )
+        linreg_input_actions = X[
+            init_index : init_index + args.context_length + args.prediction_horizon,
+            : n_observations + n_actions,
+        ]
         linreg_pred_actions = linreg_model_actions.predict(linreg_input_actions)
 
         # linear
@@ -357,8 +432,9 @@ for dataset_name in args.data_label:
                     linreg_pred_actions[args.context_length + h - 1].reshape((1, -1)),
                     X[
                         init_index + args.context_length + h,
-                        n_observations + 1 : n_observations + 1 + n_actions,
+                        n_observations : n_observations + n_actions,
                     ].reshape((1, -1)),
+                    # TODO: halfcheetah have obs_reward as additional obs
                 ],
                 axis=1,
             )
@@ -387,8 +463,9 @@ for dataset_name in args.data_label:
                     mlp_actions_pred[args.context_length + h - 1].reshape((1, -1)),
                     X[
                         init_index + args.context_length + h,
-                        n_observations + 1 : n_observations + 1 + n_actions,
+                        n_observations : n_observations + n_actions,
                     ].reshape((1, -1)),
+                    # TODO: halfcheetah have obs_reward as additional obs
                 ],
                 axis=1,
             )
@@ -445,67 +522,25 @@ for dataset_name in args.data_label:
             axis=1,
         )
 
+    models += ["linreg", "linreg_actions", "mlp", "mlp_actions", "cst"]
     for i in range(llm_errors.shape[1]):
-        # llm
-        mini_df = pd.DataFrame(columns=columns)
-        mini_df["prediction"] = llm_errors[:, i]
-        mini_df["model"] = "llm"
-        mini_df["dataset"] = dataset_name
-        mini_df["episode"] = i
-        df = pd.concat([df, mini_df], axis=0)
-        # mc
-        mini_df = pd.DataFrame(columns=columns)
-        mini_df["prediction"] = mc_errors[:, i]
-        mini_df["model"] = "mc"
-        mini_df["dataset"] = dataset_name
-        mini_df["episode"] = i
-        df = pd.concat([df, mini_df], axis=0)
-        # baseline:constant
-        mini_df = pd.DataFrame(columns=columns)
-        mini_df["prediction"] = cst_errors[:, i]
-        mini_df["model"] = "baseline:constant"
-        mini_df["dataset"] = dataset_name
-        mini_df["episode"] = i
-        df = pd.concat([df, mini_df], axis=0)
-        # baseline:linear
-        mini_df = pd.DataFrame(columns=columns)
-        mini_df["prediction"] = linreg_errors[:, i]
-        mini_df["model"] = "baseline:linear"
-        mini_df["dataset"] = dataset_name
-        mini_df["episode"] = i
-        df = pd.concat([df, mini_df], axis=0)
-        # baseline:linear+actions
-        mini_df = pd.DataFrame(columns=columns)
-        mini_df["prediction"] = linreg_actions_errors[:, i]
-        mini_df["model"] = "baseline:linear+actions"
-        mini_df["dataset"] = dataset_name
-        mini_df["episode"] = i
-        df = pd.concat([df, mini_df], axis=0)
-        # baseline:mlp
-        mini_df = pd.DataFrame(columns=columns)
-        mini_df["prediction"] = mlp_errors[:, i]
-        mini_df["model"] = "baseline:mlp"
-        mini_df["dataset"] = dataset_name
-        mini_df["episode"] = i
-        df = pd.concat([df, mini_df], axis=0)
-        # baseline:mlp+actions
-        mini_df = pd.DataFrame(columns=columns)
-        mini_df["prediction"] = mlp_actions_errors[:, i]
-        mini_df["model"] = "baseline:mlp+actions"
-        mini_df["dataset"] = dataset_name
-        mini_df["episode"] = i
-        df = pd.concat([df, mini_df], axis=0)
-
-    df = df.reset_index()
+        for m in models:
+            mini_df = pd.DataFrame(columns=columns)
+            mini_df["prediction"] = eval(f"{m}_errors")[:, i]
+            mini_df["model"] = m
+            mini_df["dataset"] = dataset_name
+            mini_df["episode"] = i
+            df = pd.concat([df, mini_df], axis=0)
 
     # save predictions
-    for model in ['llm', 'mc', 'linreg', 'linreg_actions', 'mlp', 'mlp_actions', 'cst']:
+    for m in ["linreg", "linreg_actions", "mlp", "mlp_actions", "cst"]:
         np.save(
             "/home/abenechehab/llmicl/src/llmicl/artifacts/data/"
             f"{args.env_name}_{dataset_name}_{args.trial_name}_"
-            f"{model}_errors.npy",
-            eval(f"{model}_errors"),
+            f"{m}_errors.npy",
+            eval(f"{m}_errors"),
         )
+df = df.reset_index()
 # ----------------------------------------------------------------------------------
 
 # ------------------------------ Visualization ------------------------------
@@ -518,11 +553,12 @@ g = sns.relplot(
     kind="line",  # palette="flare"
     # facet_kws=dict(legend_out=True)
 )
+plt.legend()
 
 sns.move_legend(
     g,
     "lower center",
-    bbox_to_anchor=(0.5, 1),
+    bbox_to_anchor=(0.5, 0.7),
     ncol=3,
     title=None,
     frameon=False,
@@ -533,8 +569,8 @@ for ax_idx, ax in enumerate(g.axes.flat):
     ax.grid(True)
     ax.set_ylabel("MSE")
 
-g.fig.suptitle(
-    f"Env: {args.env_name} | Training data size for baselines: {training_data_size}"
+g.figure.suptitle(
+    f"Env: {args.env_name} | Training data size: {args.training_data_size}"
 )
 plt.tight_layout()
 plt.savefig(
