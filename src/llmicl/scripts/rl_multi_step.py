@@ -10,13 +10,13 @@ from transformers import LlamaForCausalLM, AutoTokenizer
 import gymnasium as gym
 
 from llmicl.interfaces import trainers
-from llmicl.rl_helpers.rl_utils import load_offline_dataset
+from llmicl.rl_helpers.rl_utils import load_offline_dataset, create_env
 
 
 DEFAULT_ENV_NAME: str = "HalfCheetah"
 DEFAULT_TRIAL_NAME: str = "test"
-DEFAULT_DATA_LABEL: str = "d4rl_expert"
-DEFAULT_DATA_PATH: str = "/home/abenechehab/d4rl"
+DEFAULT_DATA_LABEL: str = "expert"
+DEFAULT_DATA_PATH: str = "/home/abenechehab/datasets"
 DEFAULT_CONTEXT_LENGTH: int = 500
 DEFAULT_INIT_INDEX: int = 0
 DEFAULT_VERBOSE: int = 0
@@ -66,11 +66,11 @@ parser.add_argument(
     default=DEFAULT_CONTEXT_LENGTH,
 )
 parser.add_argument(
-    "--init_index",
-    metavar="init_index",
+    "--episode",
+    metavar="episode",
     type=int,
-    help="the index from which the 'context_length' transitions will be selected, has "
-    "to be smaller than 'episode length - context_length'",
+    help="the episode from which the 'context_length' transitions will be selected, has "
+    "to be smaller than the number of episodes in the given dataset",
     default=DEFAULT_INIT_INDEX,
 )
 parser.add_argument(
@@ -123,12 +123,23 @@ print("finish loading model")
 model.eval()
 # ----------------------------------------------------------------------------------
 
+_, n_observations, n_actions = create_env(args.env_name)
+
 # ------------------------------ generate time series ------------------------------
 data_path = f"{args.data_path}/{args.env_name}/{args.data_label}/X_test.csv"
-X, _, n_observations, n_actions = load_offline_dataset(path=data_path)
+X = load_offline_dataset(path=data_path)
+
+restart_index = n_observations+n_actions+1
+restarts = X[:, restart_index]
+episode_starts = np.where(restarts)[0]
+assert args.episode <= len(
+    episode_starts
+), f"given episode {args.n_experiments} bigger than n episodes {len(episode_starts)}!!"
+
+init_index = episode_starts[args.episode]
 
 time_series = X[
-    args.init_index : args.init_index + args.context_length, :n_observations
+    init_index : init_index + args.context_length, :n_observations
 ]
 # ----------------------------------------------------------------------------------
 
@@ -139,9 +150,10 @@ up_shift = 1.5
 env = gym.make(args.env_name)
 
 trainer = trainers.RLICLTrainer(
-    env=env,
     model=model,
     tokenizer=tokenizer,
+    n_observations=n_observations,
+    n_actions=n_actions,
     rescale_factor=rescale_factor,
     up_shift=up_shift,
 )
@@ -169,7 +181,7 @@ if args.use_llm:
 
     for dim in range(n_observations):
         groundtruth = X[
-            args.init_index + 1 : args.init_index
+            init_index + 1 : init_index
             + args.context_length
             + 1
             + args.prediction_horizon,
@@ -239,9 +251,14 @@ if args.use_llm:
         if dim >= ((n_observations // 3) * 3):
             axes[dim].set_xlabel("timesteps")
     axes[dim].legend()
+    f.suptitle(
+        f"Env {args.env_name}|{args.data_label} - multi-step prediction by llm",
+        fontsize=16,
+    )
     plt.savefig(
         "/home/abenechehab/llmicl/src/llmicl/artifacts/figures/multi_step_llm_"
-        f"{args.env_name}_{args.data_label}_{args.init_index}_{args.trial_name}.png"
+        f"env|{args.env_name}_data|{args.data_label}_ep|{args.episode}_trial"
+        f"|{args.trial_name}.png"
     )
 else:
     _ = trainer.compute_statistics()
@@ -289,6 +306,10 @@ else:
         if dim > 15:
             axes[dim].set_xlabel("timesteps")
     axes[dim].legend()
+    f.suptitle(
+        f"Env {args.env_name}|{args.data_label} - multi-step prediction by MC",
+        fontsize=16
+    )
     plt.savefig(
         "/home/abenechehab/llmicl/src/llmicl/artifacts/figures/multi_step_mc_"
         f"{args.env_name}_{args.data_label}_{args.init_index}_{args.trial_name}.png"
