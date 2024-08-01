@@ -1,3 +1,4 @@
+from typing import List
 import argparse  # noqa: D100
 from tqdm import tqdm
 from pathlib import Path
@@ -19,7 +20,7 @@ from llmicl.rl_helpers import nn_utils
 
 DEFAULT_ENV_NAME: str = "HalfCheetah"
 DEFAULT_TRIAL_NAME: str = "test"
-DEFAULT_DATA_LABEL: str = "random"
+DEFAULT_DATA_LABEL: List[str] = ["random"]
 DEFAULT_DATA_PATH: str = "/home/abenechehab/datasets"
 DEFAULT_CONTEXT_LENGTH: int = 500
 DEFAULT_VERBOSE: int = 0
@@ -28,6 +29,9 @@ DEFAULT_START_FROM: int = 0
 DEFAULT_USE_MC: bool = False
 DEFAULT_N_EXPERIMENTS: int = 5
 DEFAULT_TRAINING_DATA_SIZE: int = 500
+DEFAULT_TO_PLOT_MODELS: List[str] = [
+    "linreg", "linreg_actions", "mlp", "mlp_actions", "cst"
+]
 
 
 # -------------------- Parse arguments --------------------
@@ -115,6 +119,14 @@ parser.add_argument(
     help="the number of experiments to conduct (number of episodes from the test "
     "dataset to consider)",
     default=DEFAULT_TRAINING_DATA_SIZE,
+)
+parser.add_argument(
+    "--to_plot_models",
+    metavar="to_plot_models",
+    type=str,
+    help="models to include in the plots",
+    default=DEFAULT_TO_PLOT_MODELS,
+    nargs="+",
 )
 
 args = parser.parse_args()
@@ -522,7 +534,7 @@ for dataset_name in args.data_label:
             axis=1,
         )
 
-    models += ["linreg", "linreg_actions", "mlp", "mlp_actions", "cst"]
+    models += args.to_plot_models
     for i in range(llm_errors.shape[1]):
         for m in models:
             mini_df = pd.DataFrame(columns=columns)
