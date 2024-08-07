@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+
 from sklearn.linear_model import LinearRegression
 
 import torch
@@ -65,7 +66,7 @@ parser.add_argument(
     metavar="data_label",
     type=str,
     help="the name of the folder that contains trace.csv, must be inside data/",
-    default=[DEFAULT_DATA_LABEL],
+    default=DEFAULT_DATA_LABEL,
     nargs="+",
 )
 parser.add_argument(
@@ -302,7 +303,7 @@ for dataset_name in args.data_label:
     for m in models:
         np.save(
             "/home/abenechehab/llmicl/src/llmicl/artifacts/data/"
-            f"{args.env_name}_{dataset_name}_{args.trial_name}_"
+            f"env|{args.env_name}_data|{dataset_name}_trial|{args.trial_name}_"
             f"{m}_errors.npy",
             eval(f"{m}_errors"),
         )
@@ -351,7 +352,7 @@ for dataset_name in args.data_label:
     )
     mlp_actions.eval()
 
-    # constant and linreg baselines
+    # initialize errors
     cst_errors = np.zeros(
         (args.context_length + args.prediction_horizon, args.n_experiments)
     )
@@ -370,6 +371,15 @@ for dataset_name in args.data_label:
     for i_exp in tqdm(range(args.n_experiments), desc="nbr of experiments"):
         init_index = episode_starts[i_exp]
 
+        # groundtruth
+        groundtruth = X[
+            init_index + 1 : init_index
+            + args.context_length
+            + 1
+            + args.prediction_horizon,
+            :n_observations,
+        ]
+
         # double-check for nan
         check_nan_with_actions = X[
             init_index : init_index
@@ -383,28 +393,6 @@ for dataset_name in args.data_label:
                 f"nan actions selected at indices "
                 f" {np.where(np.isnan(check_nan_with_actions))}"
             )
-
-        # constant
-        cst_pred = copy.copy(
-            X[
-                init_index : init_index + args.context_length + args.prediction_horizon,
-                :n_observations,
-            ]
-        )
-        cst_pred[
-            args.context_length : args.context_length + args.prediction_horizon
-        ] = cst_pred[args.context_length - 1]
-        cst_errors[:, i_exp] = np.linalg.norm(
-            X[
-                init_index + 1 : init_index
-                + args.context_length
-                + 1
-                + args.prediction_horizon,
-                :n_observations,
-            ]
-            - cst_pred,
-            axis=1,
-        )
 
         # linear actions
         linreg_input_actions = X[
@@ -489,49 +477,46 @@ for dataset_name in args.data_label:
             )
             mlp_actions_pred[args.context_length + h] = copy.copy(new_pred_actions)
 
-        linreg_errors[:, i_exp] = np.linalg.norm(
+        # constant
+        cst_pred = copy.copy(
             X[
-                init_index + 1 : init_index
-                + args.context_length
-                + 1
-                + args.prediction_horizon,
+                init_index : init_index + args.context_length + args.prediction_horizon,
                 :n_observations,
             ]
-            - linreg_pred,
+        )
+        cst_pred[
+            args.context_length : args.context_length + args.prediction_horizon
+        ] = cst_pred[args.context_length - 1]
+
+        # errors
+        cst_errors[:, i_exp] = np.linalg.norm(
+            groundtruth - cst_pred,
+            axis=1,
+        )
+        linreg_errors[:, i_exp] = np.linalg.norm(
+            groundtruth - linreg_pred,
             axis=1,
         )
         linreg_actions_errors[:, i_exp] = np.linalg.norm(
-            X[
-                init_index + 1 : init_index
-                + args.context_length
-                + 1
-                + args.prediction_horizon,
-                :n_observations,
-            ]
-            - linreg_pred_actions,
+            groundtruth - linreg_pred_actions,
             axis=1,
         )
         mlp_errors[:, i_exp] = np.linalg.norm(
-            X[
-                init_index + 1 : init_index
-                + args.context_length
-                + 1
-                + args.prediction_horizon,
-                :n_observations,
-            ]
-            - mlp_pred,
+            groundtruth - mlp_pred,
             axis=1,
         )
         mlp_actions_errors[:, i_exp] = np.linalg.norm(
-            X[
-                init_index + 1 : init_index
-                + args.context_length
-                + 1
-                + args.prediction_horizon,
-                :n_observations,
-            ]
-            - mlp_actions_pred,
+            groundtruth - mlp_actions_pred,
             axis=1,
+        )
+
+    # save predictions
+    for m in ["linreg", "linreg_actions", "mlp", "mlp_actions", "cst"]:
+        np.save(
+            "/home/abenechehab/llmicl/src/llmicl/artifacts/data/"
+            f"env|{args.env_name}_data|{dataset_name}_trial|{args.trial_name}_"
+            f"{m}_errors.npy",
+            eval(f"{m}_errors"),
         )
 
     models += args.to_plot_models
@@ -543,15 +528,6 @@ for dataset_name in args.data_label:
             mini_df["dataset"] = dataset_name
             mini_df["episode"] = i
             df = pd.concat([df, mini_df], axis=0)
-
-    # save predictions
-    for m in ["linreg", "linreg_actions", "mlp", "mlp_actions", "cst"]:
-        np.save(
-            "/home/abenechehab/llmicl/src/llmicl/artifacts/data/"
-            f"{args.env_name}_{dataset_name}_{args.trial_name}_"
-            f"{m}_errors.npy",
-            eval(f"{m}_errors"),
-        )
 df = df.reset_index()
 # ----------------------------------------------------------------------------------
 
