@@ -1,8 +1,11 @@
 import argparse  # noqa: D100
+from typing import List
 
 import copy
 import numpy as np
 import matplotlib.pyplot as plt
+
+from sklearn.linear_model import LinearRegression
 
 import torch
 from transformers import LlamaForCausalLM, AutoTokenizer
@@ -11,6 +14,7 @@ import gymnasium as gym
 
 from llmicl.interfaces import trainers
 from llmicl.rl_helpers.rl_utils import load_offline_dataset, create_env
+from llmicl.rl_helpers import nn_utils
 
 
 DEFAULT_ENV_NAME: str = "HalfCheetah"
@@ -23,6 +27,14 @@ DEFAULT_VERBOSE: int = 0
 DEFAULT_PREDICTION_HORIZON: int = 20
 DEFAULT_START_FROM: int = 0
 DEFAULT_USE_LLM: bool = False
+DEFAULT_TO_PLOT_MODELS: List[str] = [
+    "linreg",
+    "linreg_actions",
+    "mlp",
+    "mlp_actions",
+    "cst",
+]
+DEFAULT_TRAINING_DATA_SIZE: int = 500
 
 
 # -------------------- Parse arguments --------------------
@@ -102,6 +114,22 @@ parser.add_argument(
         "estimated Markov Chain (by multiplication)",
     default=DEFAULT_USE_LLM,
 )
+parser.add_argument(
+    "--to_plot_models",
+    metavar="to_plot_models",
+    type=str,
+    help="models to include in the plots",
+    default=DEFAULT_TO_PLOT_MODELS,
+    nargs="+",
+)
+parser.add_argument(
+    "--training_data_size",
+    metavar="training_data_size",
+    type=int,
+    help="the number of experiments to conduct (number of episodes from the test "
+    "dataset to consider)",
+    default=DEFAULT_TRAINING_DATA_SIZE,
+)
 
 args = parser.parse_args()
 # ----------------------------------------
@@ -168,6 +196,138 @@ trainer.update_context(
 trainer.icl(verbose=args.verbose)
 # ---------------------------------------------------------------------------
 
+# ------------------------------ Baselines ------------------------------
+# train linear regression baseline and MLP
+X_baselines = load_offline_dataset(
+    path=f"{args.data_path}/{args.env_name}/{args.data_label}/X_train.csv"
+)
+
+X_train_actions = copy.copy(
+    np.concatenate(
+        [
+            X_baselines[:, :n_observations],
+            X_baselines[:, n_observations : n_observations + n_actions],
+        ],
+        axis=1,
+    )[:-1]
+)  # TODO: halfcheetah have obs_reward as additional obs
+X_train = copy.copy(X_baselines[:-1, :n_observations])
+y_train = copy.copy(X_baselines[1:, :n_observations])
+
+nan_indices = np.unique(np.argwhere(np.isnan(X_train_actions))[:, 0])
+mask = np.ones(X_train_actions.shape[0], bool)
+mask[nan_indices] = False
+
+X_train = X_train[mask][: args.training_data_size]
+X_train_actions = X_train_actions[mask][: args.training_data_size]
+y_train = y_train[mask][: args.training_data_size]
+
+if 'linreg' in args.to_plot_models:
+    linreg_model = LinearRegression(fit_intercept=True)
+    linreg_model.fit(X_train, y_train)
+    # multi step prediction
+    linreg_input = X[
+        init_index : init_index + args.context_length + args.prediction_horizon,
+        :n_observations,
+    ]
+    linreg_pred = linreg_model.predict(linreg_input)
+    # multi-step prediction
+    for h in range(args.prediction_horizon):
+        new_pred = linreg_model.predict(
+            linreg_pred[args.context_length + h - 1].reshape((1, -1))
+        )
+        linreg_pred[args.context_length + h] = copy.copy(new_pred)
+if 'linreg_actions' in args.to_plot_models:
+    linreg_model_actions = LinearRegression(fit_intercept=True)
+    linreg_model_actions.fit(X_train_actions, y_train)
+    # multi step prediction
+    linreg_input_actions = X[
+        init_index : init_index + args.context_length + args.prediction_horizon,
+        : n_observations + n_actions,
+    ]
+    linreg_actions_pred = linreg_model_actions.predict(linreg_input_actions)
+    # multi-step prediction
+    for h in range(args.prediction_horizon):
+        # linear + actions
+        new_input_actions = np.concatenate(
+            [
+                linreg_actions_pred[args.context_length + h - 1].reshape((1, -1)),
+                X[
+                    init_index + args.context_length + h,
+                    n_observations : n_observations + n_actions,
+                ].reshape((1, -1)),
+                # TODO: halfcheetah have obs_reward as additional obs
+            ],
+            axis=1,
+        )
+        new_pred_actions = linreg_model_actions.predict(new_input_actions)
+        linreg_actions_pred[args.context_length + h] = copy.copy(new_pred_actions)
+if 'mlp' in args.to_plot_models:
+    mlp = nn_utils.NeuralNet(input_size=n_observations, output_size=n_observations)
+    _, _, mlp = nn_utils.train_mlp(model=mlp, X_train=X_train, y_train=y_train)
+    mlp.eval()
+    # multi step prediction
+    mlp_input = X[
+        init_index : init_index + args.context_length + args.prediction_horizon,
+        :n_observations,
+    ]
+    mlp_pred = (
+        mlp(torch.from_numpy(mlp_input).type(torch.FloatTensor)).cpu().detach().numpy()
+    )
+    # multi-step prediction
+    for h in range(args.prediction_horizon):
+        new_pred = (
+            mlp(
+                torch.from_numpy(
+                    mlp_pred[args.context_length + h - 1].reshape((1, -1))
+                ).type(torch.FloatTensor)
+            )
+            .cpu()
+            .detach()
+            .numpy()
+        )
+        mlp_pred[args.context_length + h] = copy.copy(new_pred)
+if 'mlp_actions' in args.to_plot_models:
+    mlp_actions = nn_utils.NeuralNet(
+        input_size=n_observations + n_actions, output_size=n_observations
+    )
+    _, _, mlp_actions = nn_utils.train_mlp(
+        model=mlp_actions, X_train=X_train_actions, y_train=y_train
+    )
+    mlp_actions.eval()
+    # multi step prediction
+    mlp_input_actions = X[
+        init_index : init_index + args.context_length + args.prediction_horizon,
+        : n_observations + n_actions,
+    ]
+    mlp_actions_pred = (
+        mlp_actions(torch.from_numpy(mlp_input_actions).type(torch.FloatTensor))
+        .cpu()
+        .detach()
+        .numpy()
+    )
+    # multi-step prediction
+    for h in range(args.prediction_horizon):
+        new_input_actions = np.concatenate(
+            [
+                mlp_actions_pred[args.context_length + h - 1].reshape((1, -1)),
+                X[
+                    init_index + args.context_length + h,
+                    n_observations : n_observations + n_actions,
+                ].reshape((1, -1)),
+                # TODO: halfcheetah have obs_reward as additional obs
+            ],
+            axis=1,
+        )
+        new_pred_actions = (
+            mlp_actions(torch.from_numpy(new_input_actions).type(torch.FloatTensor))
+            .cpu()
+            .detach()
+            .numpy()
+        )
+        mlp_actions_pred[args.context_length + h] = copy.copy(new_pred_actions)
+# ---------------------------------------------------------------------------
+
 # ------------------------------ Visualization ------------------------------
 n_rows = (n_observations // 3) + 1
 f, axes = plt.subplots(
@@ -227,18 +387,83 @@ if args.use_llm:
             color="blue",
         )
         axes[dim].plot(
-            x[-args.prediction_horizon :],
-            mean_arr[-args.prediction_horizon :],
+            x[-args.prediction_horizon - 1 :],
+            mean_arr[-args.prediction_horizon - 1 :],
             label="multi-step",
             color="orange",
         )
         axes[dim].fill_between(
-            x=x[-args.prediction_horizon :],
-            y1=mean_arr[-args.prediction_horizon :] - sigma_arr[-args.prediction_horizon :],
-            y2=mean_arr[-args.prediction_horizon :] + sigma_arr[-args.prediction_horizon :],
+            x=x[-args.prediction_horizon - 1 :],
+            y1=mean_arr[-args.prediction_horizon - 1 :]
+            - sigma_arr[-args.prediction_horizon - 1 :],
+            y2=mean_arr[-args.prediction_horizon - 1 :]
+            + sigma_arr[-args.prediction_horizon - 1 :],
             alpha=0.3,
             color="orange",
         )
+
+        # -----------------
+        initial_state = X[init_index + args.context_length, dim]
+        if 'linreg' in args.to_plot_models:
+            axes[dim].plot(
+                x[-args.prediction_horizon - 1 :],
+                np.concatenate(
+                    [
+                        initial_state.reshape((1,)),
+                        linreg_pred[-args.prediction_horizon :, dim],
+                    ],
+                    axis=0,
+                ),
+                label="linreg",
+                color="green",
+            )
+        if 'linreg_actions' in args.to_plot_models:
+            axes[dim].plot(
+                x[-args.prediction_horizon - 1 :],
+                np.concatenate(
+                    [
+                        initial_state.reshape((1,)),
+                        linreg_actions_pred[-args.prediction_horizon :, dim],
+                    ],
+                    axis=0,
+                ),
+                label="linreg_actions",
+                color="brown",
+            )
+        if 'mlp' in args.to_plot_models:
+            axes[dim].plot(
+                x[-args.prediction_horizon - 1 :],
+                np.concatenate(
+                    [
+                        initial_state.reshape((1,)),
+                        mlp_pred[-args.prediction_horizon :, dim],
+                    ],
+                    axis=0,
+                ),
+                label="mlp",
+                color="cyan",
+            )
+        if 'mlp_actions' in args.to_plot_models:
+            axes[dim].plot(
+                x[-args.prediction_horizon - 1 :],
+                np.concatenate(
+                    [
+                        initial_state.reshape((1,)),
+                        mlp_actions_pred[-args.prediction_horizon :, dim],
+                    ],
+                    axis=0,
+                ),
+                label="mlp_actions",
+                color="purple",
+            )
+        if 'constant' in args.to_plot_models:
+            axes[dim].plot(
+                x[-args.prediction_horizon-1 :],
+                initial_state * np.ones_like(x[-args.prediction_horizon-1 :]),
+                label="constant",
+                color="gray",
+            )
+        # -----------------
 
         axes[dim].plot(
             x[args.start_from :],
@@ -252,7 +477,7 @@ if args.use_llm:
             axes[dim].set_xlabel("timesteps")
     axes[dim].legend()
     f.suptitle(
-        f"Env {args.env_name}|{args.data_label} - multi-step prediction by llm",
+        f"Env {args.env_name}|{args.data_label}|Ep {args.episode} - multi-step prediction by llm",
         fontsize=16,
     )
     plt.savefig(
