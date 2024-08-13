@@ -31,7 +31,8 @@ DEFAULT_START_FROM: int = 0
 DEFAULT_USE_LLM: bool = False
 DEFAULT_TO_PLOT_MODELS: List[str] = []
 DEFAULT_TRAINING_DATA_SIZE: int = 500
-DEFAULT_POLICY_CHECKPOINT = 0
+DEFAULT_POLICY_CHECKPOINT: int = 0
+DEFAULT_STOCHASTIC: bool = False
 
 
 # -------------------- Parse arguments --------------------
@@ -117,6 +118,14 @@ parser.add_argument(
     help="the number of experiments to conduct (number of episodes from the test "
     "dataset to consider)",
     default=DEFAULT_TRAINING_DATA_SIZE,
+)
+parser.add_argument(
+    "--stochastic",
+    metavar="stochastic",
+    type=bool,
+    help="multi-step prediction done by sampling from the llm rather than taking the "
+        "mode",
+    default=DEFAULT_STOCHASTIC,
 )
 
 args = parser.parse_args()
@@ -348,7 +357,8 @@ f, axes = plt.subplots(
 axes = list(np.array(axes).flatten())
 if args.use_llm:
     icl_object = trainer.predict_long_horizon_llm(
-        prediction_horizon=args.prediction_horizon
+        prediction_horizon=args.prediction_horizon,
+        stochastic=args.stochastic,
     )
 
     for dim in range(n_observations):
@@ -469,16 +479,15 @@ if args.use_llm:
                 label="mlp_actions",
                 color="purple",
             )
-        if 'constant' in args.to_plot_models:
-            axes[dim].plot(
-                x[-args.prediction_horizon-1 :],
-                initial_state * np.ones_like(x[-args.prediction_horizon-1 :]),
-                label="constant",
-                color="gray",
-            )
         # -----------------
         """
 
+        axes[dim].plot(
+            x[-args.prediction_horizon-1 :],
+            initial_state * np.ones_like(x[-args.prediction_horizon-1 :]),
+            label="constant",
+            color="gray",
+        )
         axes[dim].plot(
             x[args.start_from :],
             groundtruth[args.start_from :],
