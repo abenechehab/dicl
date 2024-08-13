@@ -35,6 +35,7 @@ DEFAULT_TO_PLOT_MODELS: List[str] = [
     "cst",
 ]
 DEFAULT_TRAINING_DATA_SIZE: int = 500
+DEFAULT_STOCHASTIC: bool = False
 
 
 # -------------------- Parse arguments --------------------
@@ -129,6 +130,14 @@ parser.add_argument(
     help="the number of experiments to conduct (number of episodes from the test "
     "dataset to consider)",
     default=DEFAULT_TRAINING_DATA_SIZE,
+)
+parser.add_argument(
+    "--stochastic",
+    metavar="stochastic",
+    type=bool,
+    help="multi-step prediction done by sampling from the llm rather than taking the "
+    "mode",
+    default=DEFAULT_STOCHASTIC,
 )
 
 args = parser.parse_args()
@@ -336,7 +345,8 @@ f, axes = plt.subplots(
 axes = list(np.array(axes).flatten())
 if args.use_llm:
     icl_object = trainer.predict_long_horizon_llm(
-        prediction_horizon=args.prediction_horizon
+        prediction_horizon=args.prediction_horizon,
+        stochastic=args.stochastic,
     )
 
     for dim in range(n_observations):
