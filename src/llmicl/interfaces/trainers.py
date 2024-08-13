@@ -367,6 +367,7 @@ class RLICLTrainer(ICLTrainer):
         self,
         temperature: float = 1.0,
         n_states: int = 1000,
+        stochastic: bool = False,
         use_cache: bool = False,
         verbose: int = 0,
     ):
@@ -396,7 +397,16 @@ class RLICLTrainer(ICLTrainer):
                 PDF.compute_stats()
 
                 # Calculate the mode of the PDF
-                next_state = ((PDF.mode - self.up_shift) / self.rescale_factor) * (ts_max - ts_min) + ts_min
+                if stochastic:
+                    raw_state = np.random.choice(
+                        PDF.bin_center_arr,
+                        p=PDF.bin_height_arr / np.sum(PDF.bin_height_arr),
+                    )
+                else:
+                    raw_state = PDF.mode
+                next_state = ((raw_state - self.up_shift) / self.rescale_factor) * (
+                    ts_max - ts_min
+                ) + ts_min
                 predictions.append(next_state)
 
             self.icl_object[dim].predictions = np.array(predictions)
@@ -480,7 +490,9 @@ class RLICLTrainer(ICLTrainer):
         return self.transition_matrix_NN, self.transition_matrix_OT
 
     def predict_long_horizon_llm(
-            self, prediction_horizon: int, temperature: float = 1.0):
+        self,
+        prediction_horizon: int, temperature: float = 1.0, stochastic: bool = False
+    ):
         """
         Predict h steps into the future by appending the previous prediction to the time series.
         """
@@ -509,7 +521,7 @@ class RLICLTrainer(ICLTrainer):
                 context_length=self.context_length + h + 1,
                 update_min_max=False,  # if False, predictions get out of bounds
             )
-            self.icl(temperature=temperature, verbose=0)
+            self.icl(temperature=temperature, stochastic=stochastic, verbose=0)
 
             current_ts = np.concatenate([current_ts, last_prediction], axis=0)
 
