@@ -1,8 +1,8 @@
 # original
 numpy
 torch
-openai 
-tiktoken
+# openai 
+# tiktoken
 tqdm
 matplotlib
 pandas<2.0.0
@@ -13,3 +13,8 @@ multiprocess
 scipy
 scikit-learn
 accelerate
+
+# quantization
+bitsandbytes
+
+sentencepiece  # for gemma
