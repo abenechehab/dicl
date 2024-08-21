@@ -10,8 +10,6 @@ from sklearn.linear_model import LinearRegression
 import torch
 from transformers import LlamaForCausalLM, AutoTokenizer
 
-import gymnasium as gym
-
 from llmicl.interfaces import trainers
 from llmicl.rl_helpers.rl_utils import load_offline_dataset, create_env
 from llmicl.rl_helpers import nn_utils
@@ -183,8 +181,6 @@ time_series = X[
 # ------------------------------ ICL ------------------------------
 rescale_factor = 7.0
 up_shift = 1.5
-
-env = gym.make(args.env_name)
 
 trainer = trainers.RLICLTrainer(
     model=model,
