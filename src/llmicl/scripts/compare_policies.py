@@ -37,6 +37,7 @@ DEFAULT_USE_MC: bool = False
 DEFAULT_N_EXPERIMENTS: int = 5
 DEFAULT_POLICY_CHECKPOINT: List[int] = [0]
 DEFAULT_TO_PLOT_MODELS: List[str] = []
+DEFAULT_STOCHASTIC: bool = False
 
 
 # -------------------- Parse arguments --------------------
@@ -123,6 +124,14 @@ parser.add_argument(
     help="models to include in the plots",
     default=DEFAULT_TO_PLOT_MODELS,
     nargs="+",
+)
+parser.add_argument(
+    "--stochastic",
+    metavar="stochastic",
+    type=bool,
+    help="multi-step prediction done by sampling from the llm rather than taking the "
+    "mode",
+    default=DEFAULT_STOCHASTIC,
 )
 
 args = parser.parse_args()
@@ -291,7 +300,7 @@ for i_checkpoint in args.policy_checkpoint:
 
             # -------- LLM --------
             icl_object = trainer.predict_long_horizon_llm(
-                prediction_horizon=args.prediction_horizon
+                prediction_horizon=args.prediction_horizon, stochastic=args.stochastic
             )
 
             llm_predictions = np.zeros(
