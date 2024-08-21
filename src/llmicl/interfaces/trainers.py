@@ -18,16 +18,13 @@ from llmicl.matrix_completion.utils import (
     completion_matrix_ot_breg,
     bins_completion,
 )
-from llmicl.rl_helpers.rl_utils import (
-    calculate_multiPDF_llama3,
-)
+from llmicl.rl_helpers.rl_utils import calculate_multiPDF_llama3, calculate_multiPDF
 
 if TYPE_CHECKING:
     from transformers import (
         LlamaForCausalLM,
         AutoTokenizer
     )
-    from gymnasium import Env
     from llmicl.legacy.models.ICL import MultiResolutionPDF
 
 
@@ -370,6 +367,7 @@ class RLICLTrainer(ICLTrainer):
         stochastic: bool = False,
         use_cache: bool = False,
         verbose: int = 0,
+        llama_3_tokenizer: bool = True
     ):
         self.use_cache = use_cache
         for dim in tqdm(
@@ -377,16 +375,25 @@ class RLICLTrainer(ICLTrainer):
             desc="icl / state dim",
             disable=not bool(verbose)
         ):
-            PDF_list, _, kv_cache = calculate_multiPDF_llama3(
-                self.icl_object[dim].str_series,
-                model=self.model,
-                tokenizer=self.tokenizer,
-                n_states=n_states,
-                temperature=temperature,
-                use_cache=self.use_cache,
-            )
+            if llama_3_tokenizer:
+                PDF_list, _, kv_cache = calculate_multiPDF_llama3(
+                    self.icl_object[dim].str_series,
+                    model=self.model,
+                    tokenizer=self.tokenizer,
+                    n_states=n_states,
+                    temperature=temperature,
+                    use_cache=self.use_cache,
+                )
+                self.kv_cache[dim] = kv_cache
+            else:
+                PDF_list = calculate_multiPDF(
+                    self.icl_object[dim].str_series,
+                    model=self.model,
+                    tokenizer=self.tokenizer,
+                    prec=2,
+                )
+
             self.icl_object[dim].PDF_list = PDF_list
-            self.kv_cache[dim] = kv_cache
 
             ts_min = self.icl_object[dim].rescaling_min
             ts_max = self.icl_object[dim].rescaling_max
