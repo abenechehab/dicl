@@ -13,6 +13,7 @@ requires-python = ">=3.8"
 [project.optional-dependencies]
 dev = ['ruff', 'pre-commit', 'black']  # 'pytest', 'pytest-cov', 'pytest-check', 'pytest-mock',
 rl = ['gymnasium[mujoco]', 'dm-control']
+ot = ['POT']
 
 [tool.setuptools]
 license-files = ['LICEN[CS]E*', 'COPYING*', 'NOTICE*', 'AUTHORS*']
