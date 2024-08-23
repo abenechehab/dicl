@@ -20,6 +20,8 @@ from llmicl.matrix_completion.utils import (
 )
 from llmicl.rl_helpers.rl_utils import calculate_multiPDF_llama3, calculate_multiPDF
 
+from openai import OpenAI
+
 if TYPE_CHECKING:
     from transformers import (
         LlamaForCausalLM,
@@ -284,7 +286,7 @@ class UnivariateICLTrainer(ICLTrainer):
 class RLICLTrainer(ICLTrainer):
     def __init__(
         self,
-        model: "LlamaForCausalLM",
+        model: Optional["LlamaForCausalLM"],
         tokenizer: "AutoTokenizer",
         n_observations: int,
         n_actions: int,
@@ -541,6 +543,79 @@ class RLICLTrainer(ICLTrainer):
             ))
 
         return self.compute_statistics()
+
+    def predict_long_horizon_api(
+        self,
+        model: str = "llama-3-8b-instruct",
+        prediction_horizon: int = 10,
+        temperature: float = 1.0,
+        verbose: int = 0,
+    ):
+        """
+        Predict h steps into the future by appending the previous prediction to the time series.
+        """
+        all_predictions = []
+        for dim in tqdm(
+            range(self.n_observations),
+            desc="icl / state dim",
+            disable=not bool(verbose),
+        ):
+            # call openai api
+            client = OpenAI(
+                # base_url="http://10.155.97.225:4000/v1",
+                base_url="http://10.227.91.60:4000/v1",  # For European Research Institue
+                api_key="sk-1234",
+            )
+
+            good_tokens_str = [","]
+            for num in range(1000):
+                good_tokens_str.append(str(num))
+            good_tokens = [
+                self.tokenizer.convert_tokens_to_ids(token) for token in good_tokens_str
+            ]
+
+            stream = client.chat.completions.create(
+                model=model,
+                messages=[
+                    # {'role': 'system', 'content': 'You are a very helpful, respectful and honest assistant.'},
+                    # {"role": "user", "content": "Tell me a joke."},
+                    # {"role": "user", "content": chatgpt_sys_message + extra_input + fibo_series},
+                    {"role": "user", "content": self.icl_object[dim].str_series},
+                ],
+                temperature=0,
+                stream=True,
+                max_tokens=2*prediction_horizon-1,
+                logit_bias={id: 30 for id in good_tokens},
+            )
+
+            full_response = ''
+            for chunk in stream:
+                try:
+                    full_response += chunk.choices[0].delta.content
+                except TypeError:
+                    pass
+            full_response = full_response.split(',')
+
+            # print(f"full_response: {full_response}")
+
+            # self.icl_object[dim].PDF_list = PDF_list
+
+            ts_min = self.icl_object[dim].rescaling_min
+            ts_max = self.icl_object[dim].rescaling_max
+
+            predictions = []
+            for timestep in range(prediction_horizon):
+                raw_state = float(full_response[timestep]) / 100
+                next_state = ((raw_state - self.up_shift) / self.rescale_factor) * (
+                    ts_max - ts_min
+                ) + ts_min
+                predictions.append(next_state)
+
+            # self.icl_object[dim].predictions = np.array(predictions)
+
+            all_predictions.append(predictions)
+
+        return np.array(all_predictions)
 
     def predict_long_horizon_MC(
         self,
