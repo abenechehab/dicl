@@ -20,7 +20,7 @@ from llmicl.interfaces import trainers
 from llmicl.rl_helpers.rl_utils import create_env
 # from llmicl.rl_helpers import nn_utils
 
-from llmicl.rl_helpers.cleanrl_utils import Actor, make_env
+from llmicl.rl_helpers.cleanrl_utils import SACActor, PPOAgent, make_env
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -162,13 +162,24 @@ env, n_observations, n_actions = create_env(args.env_name)
 columns = ["error", "model", "policy_checkpoint", "experiment"]
 df = pd.DataFrame(columns=columns)
 for i_checkpoint in args.policy_checkpoint:
+    if 'sac' in args.policy_path:
+        actor_builder = SACActor
+    elif 'ppo' in args.policy_path:
+        actor_builder = PPOAgent
+    else:
+        raise ValueError('RL agent not supported !')
+
     # ------------------------------ load policy ------------------------------
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_name, seed=7, idx=0, capture_video=False, run_name="")]
+        [
+            make_env(
+                args.env_name, seed=7, idx=0, capture_video=False, run_name=""
+            )
+        ]
     )
-    actor = Actor(envs).to(DEVICE)
+    actor = actor_builder(envs).to(DEVICE)
     actor.load_state_dict(
-        torch.load(f"{args.policy_path}/actor_checkpoint_{i_checkpoint}.pth")
+        torch.load(f"{args.policy_path}_{i_checkpoint}.pth")
     )
     actor.eval()
     # -------------------------------------------------------------------------
@@ -224,7 +235,14 @@ for i_checkpoint in args.policy_checkpoint:
             ):
                 line = []
                 line.append(obs[None, ...])
-                action, _, _ = actor.get_action(torch.Tensor(obs[None, ...]).to(DEVICE))
+                if 'sac' in args.policy_path:
+                    action, _, _ = actor.get_action(
+                        torch.Tensor(obs[None, ...]).to(DEVICE)
+                    )
+                elif 'ppo' in args.policy_path:
+                    action, _, _, _, _ = actor.get_action_and_value(
+                        torch.Tensor(obs[None, ...]).to(DEVICE)
+                    )
                 action = action.detach().cpu().numpy().flatten()
                 line.append(action[None, ...])
                 obs_next, reward, terminated, truncated, _ = env.step(action)
