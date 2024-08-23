@@ -16,7 +16,7 @@ from llmicl.interfaces import trainers
 from llmicl.rl_helpers.rl_utils import create_env
 # from llmicl.rl_helpers import nn_utils
 
-from llmicl.rl_helpers.cleanrl_utils import Actor, make_env
+from llmicl.rl_helpers.cleanrl_utils import SACActor, PPOAgent, make_env
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -58,6 +58,13 @@ parser.add_argument(
     metavar="policy_path",
     type=str,
     help="the folder that contains the policy checkpoints",
+    required=True,
+)
+parser.add_argument(
+    "--policy_name",
+    metavar="policy_name",
+    type=str,
+    help="the policy name to create a customized file name!",
     required=True,
 )
 parser.add_argument(
@@ -152,12 +159,18 @@ env, n_observations, n_actions = create_env(args.env_name)
 
 # ------------------------------ generate time series ------------------------------
 # load policy
+if 'sac' in args.policy_path:
+    actor_builder = SACActor
+elif 'ppo' in args.policy_path:
+    actor_builder = PPOAgent
+else:
+    raise ValueError('RL agent not supported !')
 envs = gym.vector.SyncVectorEnv(
     [make_env(args.env_name, seed=7, idx=0, capture_video=False, run_name="")]
 )
-actor = Actor(envs).to(DEVICE)
+actor = actor_builder(envs).to(DEVICE)
 actor.load_state_dict(
-    torch.load(f"{args.policy_path}/actor_checkpoint_{args.policy_checkpoint}.pth")
+    torch.load(f"{args.policy_path}_{args.policy_checkpoint}.pth")
 )
 actor.eval()
 
@@ -170,7 +183,14 @@ for step in range(
 ):
     line = []
     line.append(obs[None, ...])
-    action, _, _ = actor.get_action(torch.Tensor(obs[None, ...]).to(DEVICE))
+    if 'sac' in args.policy_path:
+        action, _, _ = actor.get_action(
+            torch.Tensor(obs[None, ...]).to(DEVICE)
+        )
+    elif 'ppo' in args.policy_path:
+        action, _, _, _, _ = actor.get_action_and_value(
+            torch.Tensor(obs[None, ...]).to(DEVICE)
+        )
     action = action.detach().cpu().numpy().flatten()
     line.append(action[None, ...])
     obs_next, reward, terminated, truncated, _ = env.step(action)
@@ -505,7 +525,7 @@ if args.use_llm:
     )
     plt.savefig(
         "/home/abenechehab/llmicl/src/llmicl/artifacts/figures/multi_step_llm_"
-        f"env|{args.env_name}_policy|{args.policy_checkpoint}_trial"
+        f"env|{args.env_name}_policy|{args.policy_name}-{args.policy_checkpoint}_trial"
         f"|{args.trial_name}.png"
     )
 else:
