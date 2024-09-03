@@ -47,7 +47,7 @@ class NeuralNet(nn.Module):
         x = self.common_block(x)
         return self.mu(x)
 
-def train_mlp(model, X_train, y_train):
+def train_mlp(model, X_train, y_train, verbose=0):
     learning_rate = 0.001
 
     loss_fn = nn.MSELoss()
@@ -87,7 +87,9 @@ def train_mlp(model, X_train, y_train):
 
     n_train = len(dataset_train.dataset)
 
-    for _ in tqdm(range(1, 1 + n_epochs), desc="training epochs"):
+    for _ in tqdm(
+        range(1, 1 + n_epochs), desc="training epochs", disable=not bool(verbose)
+    ):
         model.train()
 
         train_loss = 0
