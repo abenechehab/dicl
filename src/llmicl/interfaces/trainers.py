@@ -18,7 +18,11 @@ from llmicl.matrix_completion.utils import (
     completion_matrix_ot_breg,
     bins_completion,
 )
-from llmicl.rl_helpers.rl_utils import calculate_multiPDF_llama3, calculate_multiPDF
+from llmicl.rl_helpers.rl_utils import (
+    calculate_multiPDF_llama3,
+    calculate_multiPDF,
+    calculate_multiPDF_llama3_parallel,
+)
 
 from openai import OpenAI
 
@@ -28,7 +32,6 @@ if TYPE_CHECKING:
         AutoTokenizer
     )
     from llmicl.legacy.models.ICL import MultiResolutionPDF
-
 
 
 @dataclass
@@ -422,6 +425,55 @@ class RLICLTrainer(ICLTrainer):
 
         return self.icl_object
 
+    def icl_parallel(
+        self,
+        temperature: float = 1.0,
+        n_states: int = 1000,
+        stochastic: bool = False,
+        verbose: int = 0,
+    ):
+        batched_PDF_list, _, _ = calculate_multiPDF_llama3_parallel(
+            [self.icl_object[dim].str_series for dim in range(self.n_observations)],
+            model=self.model,
+            tokenizer=self.tokenizer,
+            n_states=n_states,
+            temperature=temperature,
+        )
+
+        for dim in tqdm(
+            range(self.n_observations),
+            desc="icl / state dim",
+            disable=not bool(verbose)
+        ):
+            PDF_list = batched_PDF_list[dim]
+
+            self.icl_object[dim].PDF_list = PDF_list
+
+            ts_min = self.icl_object[dim].rescaling_min
+            ts_max = self.icl_object[dim].rescaling_max
+
+            predictions = []
+            for timestep in range(len(PDF_list)):
+                PDF: "MultiResolutionPDF" = PDF_list[timestep]
+                PDF.compute_stats()
+
+                # Calculate the mode of the PDF
+                if stochastic:
+                    raw_state = np.random.choice(
+                        PDF.bin_center_arr,
+                        p=PDF.bin_height_arr / np.sum(PDF.bin_height_arr),
+                    )
+                else:
+                    raw_state = PDF.mode
+                next_state = ((raw_state - self.up_shift) / self.rescale_factor) * (
+                    ts_max - ts_min
+                ) + ts_min
+                predictions.append(next_state)
+
+            self.icl_object[dim].predictions = np.array(predictions)
+
+        return self.icl_object
+
     def compute_statistics(self,):
         for dim in range(self.n_observations):
             PDF_list = self.icl_object[dim].PDF_list
@@ -500,7 +552,10 @@ class RLICLTrainer(ICLTrainer):
 
     def predict_long_horizon_llm(
         self,
-        prediction_horizon: int, temperature: float = 1.0, stochastic: bool = False
+        prediction_horizon: int,
+        temperature: float = 1.0,
+        stochastic: bool = False,
+        verbose: int = 0
     ):
         """
         Predict h steps into the future by appending the previous prediction to the time series.
@@ -520,7 +575,11 @@ class RLICLTrainer(ICLTrainer):
             ],
             axis=1,
         ))
-        for h in tqdm(range(prediction_horizon), desc="prediction_horizon"):
+        for h in tqdm(
+            range(prediction_horizon),
+            desc="prediction_horizon",
+            disable=not bool(verbose),
+        ):
             input_time_series = np.concatenate([current_ts, last_prediction], axis=0)
 
             self.update_context(
