@@ -372,7 +372,8 @@ class RLICLTrainer(ICLTrainer):
         stochastic: bool = False,
         use_cache: bool = False,
         verbose: int = 0,
-        llama_3_tokenizer: bool = True
+        llama_3_tokenizer: bool = True,
+        if_true_mean_else_mode: bool = False,
     ):
         self.use_cache = use_cache
         for dim in tqdm(
@@ -415,7 +416,7 @@ class RLICLTrainer(ICLTrainer):
                         p=PDF.bin_height_arr / np.sum(PDF.bin_height_arr),
                     )
                 else:
-                    raw_state = PDF.mode
+                    raw_state = PDF.mean if if_true_mean_else_mode else PDF.mode
                 next_state = ((raw_state - self.up_shift) / self.rescale_factor) * (
                     ts_max - ts_min
                 ) + ts_min
@@ -431,6 +432,7 @@ class RLICLTrainer(ICLTrainer):
         n_states: int = 1000,
         stochastic: bool = False,
         verbose: int = 0,
+        if_true_mean_else_mode: bool = False,
     ):
         batched_PDF_list, _, _ = calculate_multiPDF_llama3_parallel(
             [self.icl_object[dim].str_series for dim in range(self.n_observations)],
@@ -464,7 +466,7 @@ class RLICLTrainer(ICLTrainer):
                         p=PDF.bin_height_arr / np.sum(PDF.bin_height_arr),
                     )
                 else:
-                    raw_state = PDF.mode
+                    raw_state = PDF.mean if if_true_mean_else_mode else PDF.mode
                 next_state = ((raw_state - self.up_shift) / self.rescale_factor) * (
                     ts_max - ts_min
                 ) + ts_min
@@ -679,6 +681,7 @@ class RLICLTrainer(ICLTrainer):
     def predict_long_horizon_MC(
         self,
         prediction_horizon: int,
+        sampling: str = 'mode',
     ):
         """
         Predict h steps into the future by rolling out the MC.
@@ -694,16 +697,36 @@ class RLICLTrainer(ICLTrainer):
             for index, state in enumerate(self.icl_object[dim].str_series.split(',')[:-1]):
                 next_state_dist = self.transition_matrix_OT[dim][int(state)]
 
-                next_state = np.argmax(next_state_dist)
+                if sampling=='mode':
+                    next_state = np.argmax(next_state_dist)
+                elif sampling=='mean':
+                    next_state = np.sum(next_state_dist * np.arange(1000))
+                elif sampling=='stoch':
+                    next_state = np.random.choice(
+                        np.arange(1000),
+                        p=next_state_dist / np.sum(next_state_dist),
+                    )
+                else:
+                    raise ValueError(f'samplin "{sampling}" not supported!')
 
                 predictions[index, dim] = (((next_state / 100) - self.up_shift) / self.rescale_factor) * (
                     ts_max - ts_min
                 ) + ts_min
 
             for h in range(self.context_length, self.context_length + prediction_horizon):
-                next_state_dist = self.transition_matrix_OT[dim][next_state]
+                next_state_dist = self.transition_matrix_OT[dim][int(next_state)]
 
-                next_state = np.argmax(next_state_dist)
+                if sampling=='mode':
+                    next_state = np.argmax(next_state_dist)
+                elif sampling=='mean':
+                    next_state = np.sum(next_state_dist * np.arange(1000))
+                elif sampling=='stoch':
+                    next_state = np.random.choice(
+                        np.arange(1000),
+                        p=next_state_dist / np.sum(next_state_dist),
+                    )
+                else:
+                    raise ValueError(f'samplin "{sampling}" not supported!')
 
                 predictions[h, dim] = (((next_state / 100) - self.up_shift) / self.rescale_factor) * (
                     ts_max - ts_min
