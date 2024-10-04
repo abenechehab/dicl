@@ -121,10 +121,10 @@ def completion_matrix_ot_breg(bins, ns, loss, reg, verbose=0):
                 bin_list = bin2list(bins[idx])
                 P[tok] = bin_list
                 values_and_losses[tok] = loss[idx]
-    for idx in range(149,850):
-        P[idx][:149], P[idx][850:] = [0.0] * 149, [0.0] * 150
+    # for idx in range(149,850):
+    #     P[idx][:149], P[idx][850:] = [0.0] * 149, [0.0] * 150
     P = simple_normalize(P)
-    P[:149], P[850:] = [one_prob_return(1000,150)] * 149, [one_prob_return(1000,849)] * 150
+    # P[:149], P[850:] = [one_prob_return(1000,150)] * 149, [one_prob_return(1000,849)] * 150
     interpolate_wass_barycenter_breg(P, values_and_losses, reg=reg, verbose=verbose)
     P = simple_normalize(P)
     return P, values_and_losses
