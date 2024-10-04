@@ -557,7 +557,8 @@ class RLICLTrainer(ICLTrainer):
         prediction_horizon: int,
         temperature: float = 1.0,
         stochastic: bool = False,
-        verbose: int = 0
+        verbose: int = 0,
+        if_true_mean_else_mode: bool = False,
     ):
         """
         Predict h steps into the future by appending the previous prediction to the time series.
@@ -591,7 +592,12 @@ class RLICLTrainer(ICLTrainer):
                 context_length=self.context_length + h + 1,
                 update_min_max=False,  # if False, predictions get out of bounds
             )
-            self.icl(temperature=temperature, stochastic=stochastic, verbose=0)
+            self.icl(
+                temperature=temperature,
+                stochastic=stochastic,
+                if_true_mean_else_mode=if_true_mean_else_mode,
+                verbose=0,
+            )
 
             current_ts = np.concatenate([current_ts, last_prediction], axis=0)
 
