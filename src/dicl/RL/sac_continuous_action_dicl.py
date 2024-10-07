@@ -233,25 +233,25 @@ class TruncReplayBuffer(ReplayBuffer):
             self.full = True
             self.pos = 0
 
-    def save(
-        self,
-    ):
-        # with open('test.npy', 'wb') as f:
-        #     np.save(f, np.array([1, 2]))
-        #     np.save(f, np.array([1, 3]))
-        # with open('test.npy', 'rb') as f:
-        #     a = np.load(f)
-        #     b = np.load(f)
-        # print(a, b)
+    # def save(
+    #     self,
+    # ):
+    #     # with open('test.npy', 'wb') as f:
+    #     #     np.save(f, np.array([1, 2]))
+    #     #     np.save(f, np.array([1, 3]))
+    #     # with open('test.npy', 'rb') as f:
+    #     #     a = np.load(f)
+    #     #     b = np.load(f)
+    #     # print(a, b)
 
-        with open(f"{args.path}/runs/{run_name}/replay_buffer.npy", "wb") as f:
-            np.save(f, self.observations[: self.pos])
-            np.save(f, self.next_observations[: self.pos])
-            np.save(f, self.actions[: self.pos])
-            np.save(f, self.rewards[: self.pos])
-            np.save(f, self.dones[: self.pos])
+    #     with open(f"{args.path}/runs/{run_name}/replay_buffer.npy", "wb") as f:
+    #         np.save(f, self.observations[: self.pos])
+    #         np.save(f, self.next_observations[: self.pos])
+    #         np.save(f, self.actions[: self.pos])
+    #         np.save(f, self.rewards[: self.pos])
+    #         np.save(f, self.dones[: self.pos])
 
-        return
+    #     return
 
 
 class CSVLogger:
@@ -372,8 +372,7 @@ class Actor(nn.Module):
         return action, log_prob, mean
 
 
-if __name__ == "__main__":
-    args = tyro.cli(Args)
+def main(args: Args):
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
 
     writer = SummaryWriter(f"{args.path}/runs/{run_name}")
@@ -406,8 +405,6 @@ if __name__ == "__main__":
     assert isinstance(
         envs.single_action_space, gym.spaces.Box
     ), "only continuous action space is supported"
-
-    max_action = float(envs.single_action_space.high[0])
 
     actor = Actor(envs).to(device)
     qf1 = SoftQNetwork(envs).to(device)
@@ -469,8 +466,8 @@ if __name__ == "__main__":
     # ----------------------------------------------------------------------------------
 
     # ----------- define n_observations and n_actions -----------
-    n_observations = envs.single_observation_space.shape[0]
-    n_actions = envs.single_action_space.shape[0]
+    # n_observations = envs.single_observation_space.shape[0]
+    # n_actions = envs.single_action_space.shape[0]
 
     # other counters
     started_sampling = False
@@ -794,3 +791,8 @@ if __name__ == "__main__":
     envs.close()
     writer.close()
     csv_logger.flush()
+
+
+if __name__ == "__main__":
+    args = tyro.cli(Args)
+    main(args)
