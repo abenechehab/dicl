@@ -11,19 +11,19 @@ from numpy.typing import NDArray
 
 from scipy.special import erf
 
-from dicl.utils.from_liu_et_al import serialize_arr, SerializerSettings
-from dicl.utils.utils import calculate_multiPDF_llama3
+from dicl.utils.updated_from_liu_et_al import (
+    serialize_arr,
+    SerializerSettings,
+    calculate_multiPDF_llama3,
+)
 
 if TYPE_CHECKING:
-    from transformers import (
-        AutoModel,
-        AutoTokenizer
-    )
-    from dicl.utils.from_liu_et_al import MultiResolutionPDF
+    from transformers import AutoModel, AutoTokenizer
+    from dicl.utils.updated_from_liu_et_al import MultiResolutionPDF
 
 
 @dataclass
-class ICLObject():
+class ICLObject:
     time_series: Optional[NDArray[np.float32]] = None
     mean_series: Optional[NDArray[np.float32]] = None
     sigma_series: Optional[NDArray[np.float32]] = None
@@ -65,7 +65,6 @@ class ICLTrainer(ABC):
         """Long horizon autoregressive predictions using the LLM."""
 
 
-
 class MultiVariateICLTrainer(ICLTrainer):
     def __init__(
         self,
@@ -85,9 +84,7 @@ class MultiVariateICLTrainer(ICLTrainer):
         self.up_shift: float = up_shift
         self.rescale_factor: float = rescale_factor
 
-        self.icl_object: List[ICLObject] = [
-            ICLObject() for _ in range(self.n_features)
-        ]
+        self.icl_object: List[ICLObject] = [ICLObject() for _ in range(self.n_features)]
         self.kv_cache: List[Optional[NDArray[np.float32]]] = [
             None for _ in range(self.n_features)
         ]
@@ -104,8 +101,10 @@ class MultiVariateICLTrainer(ICLTrainer):
             self.context_length = context_length
         else:
             self.context_length = time_series.shape[0]
-        assert len(time_series.shape) > 1 and time_series.shape[1]==self.n_features, \
-        f"Not all observations are given in time series of shape: {time_series.shape}"
+        assert (
+            len(time_series.shape) > 1 and time_series.shape[1] == self.n_features
+        ), "Not all observations are given in time series of shape: "
+        f"{time_series.shape}"
 
         for dim in range(self.n_features):
             # ------------------ serialize_gaussian ------------------
@@ -113,11 +112,11 @@ class MultiVariateICLTrainer(ICLTrainer):
                 base=10,
                 prec=2,
                 signed=True,
-                time_sep=',',
-                bit_sep='',
-                minus_sign='-',
+                time_sep=",",
+                bit_sep="",
+                minus_sign="-",
                 fixed_length=False,
-                max_val = 10
+                max_val=10,
             )
 
             if update_min_max:
@@ -163,9 +162,7 @@ class MultiVariateICLTrainer(ICLTrainer):
     ):
         self.use_cache = use_cache
         for dim in tqdm(
-            range(self.n_features),
-            desc="icl / state dim",
-            disable=not bool(verbose)
+            range(self.n_features), desc="icl / state dim", disable=not bool(verbose)
         ):
             PDF_list, _, kv_cache = calculate_multiPDF_llama3(
                 self.icl_object[dim].str_series,
@@ -204,7 +201,9 @@ class MultiVariateICLTrainer(ICLTrainer):
 
         return self.icl_object
 
-    def compute_statistics(self,):
+    def compute_statistics(
+        self,
+    ):
         for dim in range(self.n_features):
             PDF_list = self.icl_object[dim].PDF_list
 
@@ -224,9 +223,11 @@ class MultiVariateICLTrainer(ICLTrainer):
                 self.icl_object[dim].rescaled_true_mean_arr,
                 self.icl_object[dim].rescaled_true_sigma_arr,
             ):
+
                 def cdf(x):
                     return 0.5 * (1 + erf((x - true_mean) / (true_sigma * np.sqrt(2))))
-                PDF_true.discretize(cdf, mode = "cdf")
+
+                PDF_true.discretize(cdf, mode="cdf")
                 PDF_true.compute_stats()
                 discrete_BT_loss.append(PDF_true.BT_dist(PDF))
                 discrete_KL_loss.append(PDF_true.KL_div(PDF))
@@ -242,7 +243,7 @@ class MultiVariateICLTrainer(ICLTrainer):
                 moment_3_arr.append(moment_3)
                 moment_4_arr.append(moment_4)
 
-            kurtosis_arr = np.array(moment_4_arr) / np.array(sigma_arr)**4
+            kurtosis_arr = np.array(moment_4_arr) / np.array(sigma_arr) ** 4
 
             self.icl_object[dim].mean_arr = np.array(mean_arr)
             self.icl_object[dim].mode_arr = np.array(mode_arr)
@@ -267,21 +268,25 @@ class MultiVariateICLTrainer(ICLTrainer):
         Predict h steps into the future by appending the previous prediction to the
         time series.
         """
-        last_prediction = copy.copy(np.concatenate(
-            [
-                self.icl_object[dim].predictions[-1].reshape((1, 1))
-                for dim in range(self.n_features)
-            ],
-            axis=1,
-        ))
+        last_prediction = copy.copy(
+            np.concatenate(
+                [
+                    self.icl_object[dim].predictions[-1].reshape((1, 1))
+                    for dim in range(self.n_features)
+                ],
+                axis=1,
+            )
+        )
 
-        current_ts = copy.copy(np.concatenate(
-            [
-                self.icl_object[dim].time_series.reshape((-1, 1))
-                for dim in range(self.n_features)
-            ],
-            axis=1,
-        ))
+        current_ts = copy.copy(
+            np.concatenate(
+                [
+                    self.icl_object[dim].time_series.reshape((-1, 1))
+                    for dim in range(self.n_features)
+                ],
+                axis=1,
+            )
+        )
         for h in tqdm(
             range(prediction_horizon),
             desc="prediction_horizon",
@@ -305,12 +310,14 @@ class MultiVariateICLTrainer(ICLTrainer):
 
             current_ts = np.concatenate([current_ts, last_prediction], axis=0)
 
-            last_prediction = copy.copy(np.concatenate(
-                [
-                    self.icl_object[dim].predictions[-1].reshape((1, 1))
-                    for dim in range(self.n_features)
-                ],
-                axis=1,
-            ))
+            last_prediction = copy.copy(
+                np.concatenate(
+                    [
+                        self.icl_object[dim].predictions[-1].reshape((1, 1))
+                        for dim in range(self.n_features)
+                    ],
+                    axis=1,
+                )
+            )
 
         return self.compute_statistics()
