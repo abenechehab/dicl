@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from transformers import AutoModel, AutoTokenizer
 
 
-
 class IdentityTransformer(BaseEstimator, TransformerMixin):
     def __init__(self):
         pass
@@ -59,7 +58,7 @@ class DICL:
             MinMaxScaler(), StandardScaler(), disentangler
         )
 
-        self.iclearner=MultiVariateICLTrainer(
+        self.iclearner = MultiVariateICLTrainer(
             model=model,
             tokenizer=tokenizer,
             n_observations=n_components,
