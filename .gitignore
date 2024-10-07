@@ -9,11 +9,9 @@ processed_series/
 *.pyc
 
 .ipynb_checkpoints/
-figures/BM_kurtosis_temp1.png
-figures/brownian_motion.png
 
 *.egg-info
-PKG-info
+PKG-INFO
 
 
 artifacts/
