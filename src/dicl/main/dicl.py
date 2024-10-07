@@ -1,7 +1,8 @@
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 import copy
 
 import numpy as np
+from numpy.typing import NDArray
 import matplotlib.pyplot as plt
 
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -19,13 +20,15 @@ class IdentityTransformer(BaseEstimator, TransformerMixin):
     def __init__(self):
         pass
 
-    def fit(self, input_array, y=None):
+    def fit(self, input_array: NDArray, y: Optional[NDArray] = None):
         return self
 
-    def transform(self, input_array, y=None):
+    def transform(self, input_array: NDArray, y: Optional[NDArray] = None) -> NDArray:
         return input_array * 1
 
-    def inverse_transform(self, input_array, y=None):
+    def inverse_transform(
+        self, input_array: NDArray, y: Optional[NDArray] = None
+    ) -> NDArray:
         return input_array * 1
 
 
@@ -66,7 +69,7 @@ class DICL:
             up_shift=up_shift,
         )
 
-    def fit_disentangler(self, X):
+    def fit_disentangler(self, X: NDArray):
         """
         Fit the disentangler on the input data.
 
@@ -75,7 +78,7 @@ class DICL:
         """
         self.disentangler.fit(X)
 
-    def transform(self, X):
+    def transform(self, X: NDArray) -> NDArray:
         """
         Transform the input data using the disentangler.
 
@@ -87,7 +90,7 @@ class DICL:
         """
         return self.disentangler.transform(X)
 
-    def inverse_transform(self, X_transformed):
+    def inverse_transform(self, X_transformed: NDArray) -> NDArray:
         """
         Inverse transform the data back to the original space.
 
@@ -99,7 +102,7 @@ class DICL:
         """
         return self.disentangler.inverse_transform(X_transformed)
 
-    def predict_single_step(self, X):
+    def predict_single_step(self, X: NDArray) -> Tuple[NDArray, ...]:
         """
         Perform time series forecasting.
 
