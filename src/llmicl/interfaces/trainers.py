@@ -292,7 +292,6 @@ class RLICLTrainer(ICLTrainer):
         model: Optional["LlamaForCausalLM"],
         tokenizer: "AutoTokenizer",
         n_observations: int,
-        n_actions: int,
         rescale_factor: float = 7.0,
         up_shift: float = 1.5,
     ):
@@ -300,7 +299,6 @@ class RLICLTrainer(ICLTrainer):
         self.tokenizer: "AutoTokenizer" = tokenizer
 
         self.n_observations: int = n_observations
-        self.n_actions: int = n_actions
 
         self.use_cache: bool = False
 
