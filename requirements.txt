@@ -1,20 +1,13 @@
 # original
-numpy
-torch
-# openai 
-# tiktoken
-tqdm
-matplotlib
-pandas<2.0.0
-transformers
-multiprocess
-
-# added
-scipy
-scikit-learn
-accelerate
-
-# quantization
-bitsandbytes
-
-sentencepiece  # for gemma
+numpy==1.24.4
+torch==2.4.0
+tensorboard==2.11.2
+tqdm==4.66.5
+matplotlib==3.5.3
+pandas==1.3.5
+transformers==4.44.2
+accelerate==0.33.0
+multiprocess==0.70.16
+scipy==1.13.1
+scikit-learn==1.5.1
+ipykernel==6.28.0

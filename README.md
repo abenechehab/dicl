@@ -9,7 +9,7 @@ This implementation is used for the following paper:
 
    [Can LLMs predict the convergence of Stochastic Gradient Descent?](https://openreview.net/forum?id=FraikHzMu9)
 
-## Directory structure 
+## Directory structure
 An overview of the repository's structure and contents (inside /src/llmicl/):
 
 - `interfaces/`: Contains classes for the ICLTrainer. Objects of type ICLTrainer have methods to update the LLM context with a time series, call the LLM, collect the predicted PDFs, compute statistics, visualize the results, build the associated Markov chain kernel, etc.
@@ -22,7 +22,7 @@ An overview of the repository's structure and contents (inside /src/llmicl/):
 
 - create a conda environment (or pyvirtualenv):
 ```
-conda create -n LLMICL python=3.9
+conda create -n DICL python=3.9
 ```
 ```
 python3.9 -m venv venv

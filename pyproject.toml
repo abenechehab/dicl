@@ -2,24 +2,35 @@
 requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
 
 [project]
-name = "LLMICL"
-# authors = [
-#    {name = "Abdelhakim Benechehab", email = "abdelhakim.benechehab@gmail.com"}
-# ]
+name = "DICL"
+authors = [
+   {name = "Abdelhakim Benechehab", email = "abdelhakim.benechehab@gmail.com"},
+   {name = "Abdelhakim Benechehab", email = "abdelhakim.benechehab@gmail.com"},
+]
+maintainers = [
+  {name = "Abdelhakim Benechehab", email = "abdelhakim.benechehab@gmail.com"},
+]
 dynamic = ["version", "readme", "dependencies"]
-description = "ICL for dynamical systems."
-requires-python = ">=3.8"
+description = "Zero-shot Model-based Reinforcement Learning using Large Language Models."
+requires-python = ">=3.9"
+keywords = ["Model-based Reinforcement Learning", "Large language models", "Zero-shot Learning", "In-context Learning"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python :: 3.9",
+  "Environment :: GPU :: NVIDIA CUDA :: 12 :: 12.1",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
 
 [project.optional-dependencies]
-dev = ['ruff', 'pre-commit', 'black']  # 'pytest', 'pytest-cov', 'pytest-check', 'pytest-mock',
-rl = ['gymnasium[mujoco]', 'dm-control']
-ot = ['POT']
+dev = ['ruff', 'pre-commit', 'black']
+rl = ['gymnasium[mujoco]==0.28.1', 'stable-baselines3==2.0.0', 'tyro==0.5.10']
 
 [tool.setuptools]
 license-files = ['LICEN[CS]E*', 'COPYING*', 'NOTICE*', 'AUTHORS*']
 
 [project.scripts]
-# exp-launcher = "multi_step_mbrl.exp_launcher:exp_launcher_command"
+dicl-sac = "dicl.RL.sac_continuous_action_dicl:main"
 
 [tool.setuptools.dynamic]
 readme = { file = ["README.md"] }
