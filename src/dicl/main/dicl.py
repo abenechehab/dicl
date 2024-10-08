@@ -171,6 +171,89 @@ class DICL:
 
         return self.mean, self.mode, self.lb, self.ub
 
+    def predict_multi_step(
+        self,
+        X: NDArray,
+        prediction_horizon: int,
+        stochastic: bool = False,
+        if_true_mean_else_mode: bool = False,
+    ) -> Tuple[NDArray, ...]:
+        """
+        Perform time series forecasting.
+
+        Parameters:
+        X (numpy.ndarray): The input time series data.
+        horizon (int): The forecasting horizon.
+
+        Returns:
+        numpy.ndarray: The forecasted time series data in the original space.
+        """
+        assert (
+            X.shape[1] == self.n_features
+        ), f"N features doesnt correspond to {self.n_features}"
+
+        self.context_length = X.shape[0]
+        self.X = X
+        self.prediction_horizon = prediction_horizon
+
+        # Step 1: Transform the time series
+        X_transformed = self.transform(X[: -1 - prediction_horizon])
+
+        # Step 2: Perform time series forecasting
+        self.iclearner.update_context(
+            time_series=copy.copy(X_transformed),
+            mean_series=copy.copy(X_transformed),
+            sigma_series=np.zeros_like(X_transformed),
+            context_length=X_transformed.shape[0],
+            update_min_max=True,
+        )
+
+        self.iclearner.icl(
+            stochastic=stochastic,
+            if_true_mean_else_mode=if_true_mean_else_mode,
+            verbose=0,
+        )
+
+        self.icl_object = self.iclearner.predict_long_horizon_llm(
+            prediction_horizon=prediction_horizon,
+            stochastic=stochastic,
+            if_true_mean_else_mode=if_true_mean_else_mode,
+            verbose=1,
+        )
+
+        # Step 3: Inverse transform the predictions
+        all_mean = []
+        all_mode = []
+        all_lb = []
+        all_ub = []
+        for dim in range(self.n_components):
+            ts_max = self.icl_object[dim].rescaling_max
+            ts_min = self.icl_object[dim].rescaling_min
+            # -------------------- Useful for Plots --------------------
+            mode_arr = (
+                (self.icl_object[dim].mode_arr.flatten() - self.up_shift)
+                / self.rescale_factor
+            ) * (ts_max - ts_min) + ts_min
+            mean_arr = (
+                (self.icl_object[dim].mean_arr.flatten() - self.up_shift)
+                / self.rescale_factor
+            ) * (ts_max - ts_min) + ts_min
+            sigma_arr = (
+                self.icl_object[dim].sigma_arr.flatten() / self.rescale_factor
+            ) * (ts_max - ts_min)
+
+            all_mean.append(mean_arr[..., None])
+            all_mode.append(mode_arr[..., None])
+            all_lb.append(mean_arr[..., None] - sigma_arr[..., None])
+            all_ub.append(mean_arr[..., None] + sigma_arr[..., None])
+
+        self.mean = self.inverse_transform(np.concatenate(all_mean, axis=1))
+        self.mode = self.inverse_transform(np.concatenate(all_mode, axis=1))
+        self.lb = self.inverse_transform(np.concatenate(all_lb, axis=1))
+        self.ub = self.inverse_transform(np.concatenate(all_ub, axis=1))
+
+        return self.mean, self.mode, self.lb, self.ub
+
     def compute_metrics(self, burnin: int = 0):
         metrics = {}
 
@@ -259,11 +342,69 @@ class DICL:
             plt.savefig(savefigpath, bbox_inches="tight")
         plt.show()
 
+    def plot_multi_step(
+        self,
+        feature_names: Optional[List[str]] = None,
+        xlim: Optional[List[float]] = None,
+        savefigpath: Optional[str] = None,
+    ):
+        if not feature_names:
+            feature_names = [f"f{i}" for i in range(self.n_features)]
+
+        _, axes = plt.subplots(
+            (self.n_features // 3) + 1,
+            3,
+            figsize=(20, 25),
+            gridspec_kw={"hspace": 0.3},
+            sharex=True,
+        )
+        axes = list(np.array(axes).flatten())
+        for dim in range(self.n_features):
+            ax = axes[dim]
+            ax.plot(
+                np.arange(self.context_length - 1),
+                self.X[1:, dim],
+                color="red",
+                linewidth=1.5,
+                label="groundtruth",
+                linestyle="--",
+            )
+            ax.plot(
+                np.arange(self.context_length - 1),
+                self.mode[:, dim],
+                label=r"mode",
+                color="black",
+                linestyle="--",
+                alpha=0.5,
+            )
+            ax.plot(
+                np.arange(self.context_length - 1),
+                self.mean[:, dim],
+                label=r"mean $\pm$ std",
+                color=sns.color_palette("colorblind")[0],
+            )
+            ax.fill_between(
+                x=np.arange(self.context_length - 1),
+                y1=self.lb[:, dim],
+                y2=self.ub[:, dim],
+                alpha=0.3,
+                color=sns.color_palette("colorblind")[0],
+            )
+            ax.set_xlim([0, self.context_length - 1])
+            ax.set_ylabel(feature_names[dim], rotation=0, labelpad=20)
+            ax.set_yticklabels([])
+            if xlim is not None:
+                ax.set_xlim(xlim)
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.3), ncol=6)
+        if savefigpath:
+            plt.savefig(savefigpath, bbox_inches="tight")
+        plt.show()
+
     def plot_calibration(
         self,
         feature_names: Optional[List[str]] = None,
         savefigpath: Optional[str] = None,
-        burnin: int = 0
+        burnin: int = 0,
     ):
         kss, ks_quantiles = compute_ks_metric(
             groundtruth=self.X[1:],
@@ -282,7 +423,8 @@ class DICL:
             3,
             figsize=(20, 20),
             gridspec_kw={"wspace": 0.2, "hspace": 1.0},
-            sharex=True, sharey=True
+            sharex=True,
+            sharey=True,
         )
         axes = list(np.array(axes).flatten())
         for dim in range(self.n_features):
