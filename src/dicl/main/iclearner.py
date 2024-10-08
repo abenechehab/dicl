@@ -203,6 +203,7 @@ class MultiVariateICLTrainer(ICLTrainer):
 
     def compute_statistics(
         self,
+        compute_BT_and_KL: bool = False
     ):
         for dim in range(self.n_features):
             PDF_list = self.icl_object[dim].PDF_list
@@ -224,13 +225,17 @@ class MultiVariateICLTrainer(ICLTrainer):
                 self.icl_object[dim].rescaled_true_sigma_arr,
             ):
 
-                def cdf(x):
-                    return 0.5 * (1 + erf((x - true_mean) / (true_sigma * np.sqrt(2))))
+                if compute_BT_and_KL:
+                    def cdf(x):
+                        return 0.5 * (1 + erf(
+                            (x - true_mean) / (true_sigma * np.sqrt(2))
+                        ))
 
-                PDF_true.discretize(cdf, mode="cdf")
-                PDF_true.compute_stats()
-                discrete_BT_loss.append(PDF_true.BT_dist(PDF))
-                discrete_KL_loss.append(PDF_true.KL_div(PDF))
+                    PDF_true.discretize(cdf, mode="cdf")
+                    PDF_true.compute_stats()
+
+                    discrete_BT_loss.append(PDF_true.BT_dist(PDF))
+                    discrete_KL_loss.append(PDF_true.KL_div(PDF))
 
                 PDF.compute_stats()
                 mean, mode, sigma = PDF.mean, PDF.mode, PDF.sigma
