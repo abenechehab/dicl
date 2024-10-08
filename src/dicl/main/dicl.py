@@ -11,6 +11,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.decomposition import PCA
 
 from dicl.main.iclearner import MultiVariateICLTrainer
+from dicl.utils.calibration import compute_ks_metric
 
 if TYPE_CHECKING:
     from transformers import AutoModel, AutoTokenizer
@@ -134,7 +135,7 @@ class DICL:
 
         self.iclearner.icl(verbose=0, stochastic=True)
 
-        icl_object = self.iclearner.compute_statistics()
+        self.icl_object = self.iclearner.compute_statistics()
 
         # Step 3: Inverse transform the predictions
         all_mean = []
@@ -142,20 +143,20 @@ class DICL:
         all_lb = []
         all_ub = []
         for dim in range(self.n_components):
-            ts_max = icl_object[dim].rescaling_max
-            ts_min = icl_object[dim].rescaling_min
+            ts_max = self.icl_object[dim].rescaling_max
+            ts_min = self.icl_object[dim].rescaling_min
             # -------------------- Useful for Plots --------------------
             mode_arr = (
-                (icl_object[dim].mode_arr.flatten() - self.up_shift)
+                (self.icl_object[dim].mode_arr.flatten() - self.up_shift)
                 / self.rescale_factor
             ) * (ts_max - ts_min) + ts_min
             mean_arr = (
-                (icl_object[dim].mean_arr.flatten() - self.up_shift)
+                (self.icl_object[dim].mean_arr.flatten() - self.up_shift)
                 / self.rescale_factor
             ) * (ts_max - ts_min) + ts_min
-            sigma_arr = (icl_object[dim].sigma_arr.flatten() / self.rescale_factor) * (
-                ts_max - ts_min
-            )
+            sigma_arr = (
+                self.icl_object[dim].sigma_arr.flatten() / self.rescale_factor
+            ) * (ts_max - ts_min)
 
             all_mean.append(mean_arr[..., None])
             all_mode.append(mode_arr[..., None])
@@ -168,6 +169,36 @@ class DICL:
         self.ub = self.inverse_transform(np.concatenate(all_ub, axis=1))
 
         return self.mean, self.mode, self.lb, self.ub
+
+    def compute_metrics(self, burnin: int = 0):
+        metrics = {}
+
+        # ------- MSE --------
+
+        perdim_squared_errors = (self.X[1:] - self.mean) ** 2
+        agg_squared_error = np.linalg.norm(self.X[1:] - self.mean, axis=1)
+
+        metrics["average_agg_squared_error"] = agg_squared_error[burnin:].mean(axis=0)
+        metrics["agg_squared_error"] = agg_squared_error
+        metrics["average_perdim_squared_error"] = perdim_squared_errors[burnin:].mean(
+            axis=0
+        )
+        metrics["perdim_squared_error"] = agg_squared_error
+
+        # ------ KS -------
+        kss, _ = compute_ks_metric(
+            groundtruth=self.X[1:],
+            icl_object=self.icl_object,
+            n_components=self.n_components,
+            n_features=self.n_features,
+            inverse_transform=self.inverse_transform,
+            burnin=burnin,
+        )
+
+        metrics["perdim_ks"] = kss
+        metrics["agg_ks"] = kss.mean(axis=0)
+
+        return metrics
 
     def plot_single_step(
         self,
@@ -220,6 +251,59 @@ class DICL:
             ax.set_yticklabels([])
             if xlim is not None:
                 ax.set_xlim(xlim)
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.3), ncol=6)
+        if savefigpath:
+            plt.savefig(savefigpath, bbox_inches="tight")
+        plt.show()
+
+    def plot_calibration(
+        self,
+        feature_names: Optional[List[str]] = None,
+        savefigpath: Optional[str] = None,
+    ):
+        if not feature_names:
+            feature_names = [f"f{i}" for i in range(self.n_features)]
+
+        _, axes = plt.subplots(
+            (self.n_features // 3) + 1,
+            3,
+            figsize=(20, 25),
+            gridspec_kw={"hspace": 0.3},
+            sharex=True,
+        )
+        axes = list(np.array(axes).flatten())
+        for dim in range(self.n_features):
+            ax = axes[dim]
+            ax.plot(
+                np.arange(self.context_length - 1),
+                self.X[1:, dim],
+                color="red",
+                linewidth=1.5,
+                label="groundtruth",
+                linestyle="--",
+            )
+            ax.plot(
+                np.arange(self.context_length - 1),
+                self.mode[:, dim],
+                label=r"mode",
+                color="black",
+                linestyle="--",
+                alpha=0.5,
+            )
+            ax.plot(
+                np.arange(self.context_length - 1),
+                self.mean[:, dim],
+                label=r"mean $\pm$ std",
+            )
+            ax.fill_between(
+                x=np.arange(self.context_length - 1),
+                y1=self.lb[:, dim],
+                y2=self.ub[:, dim],
+                alpha=0.3,
+            )
+            ax.set_xlim([0, self.context_length - 1])
+            ax.set_ylabel(feature_names[dim], rotation=0, labelpad=20)
+            ax.set_yticklabels([])
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.3), ncol=6)
         if savefigpath:
             plt.savefig(savefigpath, bbox_inches="tight")
