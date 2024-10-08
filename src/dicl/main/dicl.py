@@ -4,6 +4,7 @@ import copy
 import numpy as np
 from numpy.typing import NDArray
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.pipeline import make_pipeline
@@ -11,7 +12,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.decomposition import PCA
 
 from dicl.main.iclearner import MultiVariateICLTrainer
-from dicl.utils.calibration import compute_ks_metric
+from dicl.utils.calibration import compute_ks_metric, ks_cdf
 
 if TYPE_CHECKING:
     from transformers import AutoModel, AutoTokenizer
@@ -239,12 +240,14 @@ class DICL:
                 np.arange(self.context_length - 1),
                 self.mean[:, dim],
                 label=r"mean $\pm$ std",
+                color=sns.color_palette("colorblind")[0],
             )
             ax.fill_between(
                 x=np.arange(self.context_length - 1),
                 y1=self.lb[:, dim],
                 y2=self.ub[:, dim],
                 alpha=0.3,
+                color=sns.color_palette("colorblind")[0],
             )
             ax.set_xlim([0, self.context_length - 1])
             ax.set_ylabel(feature_names[dim], rotation=0, labelpad=20)
@@ -260,51 +263,51 @@ class DICL:
         self,
         feature_names: Optional[List[str]] = None,
         savefigpath: Optional[str] = None,
+        burnin: int = 0
     ):
+        kss, ks_quantiles = compute_ks_metric(
+            groundtruth=self.X[1:],
+            icl_object=self.icl_object,
+            n_components=self.n_components,
+            n_features=self.n_features,
+            inverse_transform=self.inverse_transform,
+            burnin=burnin,
+        )
+
         if not feature_names:
             feature_names = [f"f{i}" for i in range(self.n_features)]
 
         _, axes = plt.subplots(
             (self.n_features // 3) + 1,
             3,
-            figsize=(20, 25),
-            gridspec_kw={"hspace": 0.3},
-            sharex=True,
+            figsize=(20, 20),
+            gridspec_kw={"wspace": 0.2, "hspace": 1.0},
+            sharex=True, sharey=True
         )
         axes = list(np.array(axes).flatten())
         for dim in range(self.n_features):
-            ax = axes[dim]
-            ax.plot(
-                np.arange(self.context_length - 1),
-                self.X[1:, dim],
-                color="red",
-                linewidth=1.5,
-                label="groundtruth",
-                linestyle="--",
+            ks_cdf(
+                ks_quantiles,
+                dim,
+                ax=axes[dim],
+                verbose=0,
+                pot_cdf_uniform=True,
+                color=sns.color_palette("colorblind")[0],
+                label=f"llm $ks={kss[dim]:.2f}$",
             )
-            ax.plot(
-                np.arange(self.context_length - 1),
-                self.mode[:, dim],
-                label=r"mode",
-                color="black",
-                linestyle="--",
-                alpha=0.5,
-            )
-            ax.plot(
-                np.arange(self.context_length - 1),
-                self.mean[:, dim],
-                label=r"mean $\pm$ std",
-            )
-            ax.fill_between(
-                x=np.arange(self.context_length - 1),
-                y1=self.lb[:, dim],
-                y2=self.ub[:, dim],
-                alpha=0.3,
-            )
-            ax.set_xlim([0, self.context_length - 1])
-            ax.set_ylabel(feature_names[dim], rotation=0, labelpad=20)
-            ax.set_yticklabels([])
-        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.3), ncol=6)
+            axes[dim].set_title(f"{feature_names[dim]}")
+            axes[dim].grid(True)
+            if dim >= (self.n_features - 3):
+                axes[dim].set_xlabel("quantile")
+                axes[dim].legend(
+                    loc="upper center", bbox_to_anchor=(0.5, -0.68), ncol=6, fontsize=9
+                )
+            else:
+                axes[dim].legend(
+                    loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=6, fontsize=9
+                )
+            if dim % 3 == 0:
+                axes[dim].set_ylabel("proportion")
         if savefigpath:
             plt.savefig(savefigpath, bbox_inches="tight")
         plt.show()
