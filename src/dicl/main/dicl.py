@@ -332,11 +332,12 @@ class DICL:
                 alpha=0.3,
                 color=sns.color_palette("colorblind")[0],
             )
-            ax.set_xlim([0, self.context_length - 1])
             ax.set_ylabel(feature_names[dim], rotation=0, labelpad=20)
             ax.set_yticklabels([])
             if xlim is not None:
                 ax.set_xlim(xlim)
+            else:
+                ax.set_xlim([0, self.context_length - 1])
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.3), ncol=6)
         if savefigpath:
             plt.savefig(savefigpath, bbox_inches="tight")
@@ -378,23 +379,43 @@ class DICL:
                 alpha=0.5,
             )
             ax.plot(
-                np.arange(self.context_length - 1),
-                self.mean[:, dim],
+                np.arange(self.context_length - self.prediction_horizon),
+                self.mean[: self.context_length - self.prediction_horizon, dim],
                 label=r"mean $\pm$ std",
                 color=sns.color_palette("colorblind")[0],
             )
             ax.fill_between(
-                x=np.arange(self.context_length - 1),
-                y1=self.lb[:, dim],
-                y2=self.ub[:, dim],
+                x=np.arange(self.context_length - self.prediction_horizon),
+                y1=self.lb[: self.context_length - self.prediction_horizon, dim],
+                y2=self.ub[: self.context_length - self.prediction_horizon, dim],
                 alpha=0.3,
                 color=sns.color_palette("colorblind")[0],
             )
-            ax.set_xlim([0, self.context_length - 1])
+            ax.plot(
+                np.arange(
+                    self.context_length - self.prediction_horizon,
+                    self.context_length - 1,
+                ),
+                self.mean[-self.prediction_horizon + 1 :, dim],
+                label="multi-step",
+                color=sns.color_palette("colorblind")[1],
+            )
+            ax.fill_between(
+                np.arange(
+                    self.context_length - self.prediction_horizon,
+                    self.context_length - 1,
+                ),
+                y1=self.lb[-self.prediction_horizon + 1 :, dim],
+                y2=self.ub[-self.prediction_horizon + 1 :, dim],
+                alpha=0.3,
+                color=sns.color_palette("colorblind")[1],
+            )
             ax.set_ylabel(feature_names[dim], rotation=0, labelpad=20)
             ax.set_yticklabels([])
             if xlim is not None:
                 ax.set_xlim(xlim)
+            else:
+                ax.set_xlim([0, self.context_length - 1])
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.3), ncol=6)
         if savefigpath:
             plt.savefig(savefigpath, bbox_inches="tight")
