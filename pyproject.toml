@@ -5,7 +5,6 @@ requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
 name = "DICL"
 authors = [
    {name = "Abdelhakim Benechehab", email = "abdelhakim.benechehab@gmail.com"},
-   {name = "Abdelhakim Benechehab", email = "abdelhakim.benechehab@gmail.com"},
 ]
 maintainers = [
   {name = "Abdelhakim Benechehab", email = "abdelhakim.benechehab@gmail.com"},
