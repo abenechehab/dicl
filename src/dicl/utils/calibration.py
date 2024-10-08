@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 import copy
 
@@ -11,6 +11,7 @@ from scipy.stats import kstwobign
 
 if TYPE_CHECKING:
     from dicl.main.iclearner import ICLObject
+    from matplotlib.axes import Axes
 
 
 def compute_ks_metric(
@@ -91,15 +92,13 @@ def compute_ks_metric(
 
 
 def ks_cdf(
-    ks_quantiles,
-    dim,
-    n_traces,
-    ax,
-    verbose=0,
-    color="r",
-    pot_cdf_uniform=True,
-    label="",
-    kss=None,
+    ks_quantiles: NDArray,
+    dim: int,
+    ax: "Axes",
+    verbose: int = 0,
+    color: Any = "b",
+    pot_cdf_uniform: bool = True,
+    label: str = "",
 ):
     quantiles = ks_quantiles[dim]
 
