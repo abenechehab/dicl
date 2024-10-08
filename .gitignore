@@ -9,7 +9,8 @@
 *.egg-info
 PKG-INFO
 
-
-artifacts/
+runs/
 
 .ruff_cache/
+
+__pycache__
