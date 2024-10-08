@@ -50,7 +50,7 @@ class Args:
     capture_video: bool = False
     """whether to capture videos of the agent performances
         (check out `videos` folder)"""
-    path: str = "/mnt/vdb/abenechehab/cleanrl"
+    path: str = "."
 
     # Algorithm specific arguments
     env_id: str = "Hopper-v4"
@@ -618,6 +618,7 @@ def main(args: Args):
 
                     DICL = dicl.DICL_PCA(
                         n_components=time_series.shape[1],
+                        n_features=time_series.shape[1],
                         model=model,
                         tokenizer=tokenizer,
                         rescale_factor=args.rescale_factor,
@@ -628,7 +629,7 @@ def main(args: Args):
 
                     # compute threshold on the true error
                     all_groundtruth = rb.next_observations[
-                        start_index : start_index + args.context_length
+                        start_index : start_index + args.context_length - 1
                     ]
 
                     true_errors = np.linalg.norm(
