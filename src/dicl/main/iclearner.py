@@ -68,7 +68,7 @@ class ICLTrainer(ABC):
 class MultiVariateICLTrainer(ICLTrainer):
     def __init__(
         self,
-        model: Optional["AutoModel"],
+        model: "AutoModel",
         tokenizer: "AutoTokenizer",
         n_features: int,
         rescale_factor: float = 7.0,
@@ -103,7 +103,7 @@ class MultiVariateICLTrainer(ICLTrainer):
             self.context_length = time_series.shape[0]
         assert (
             len(time_series.shape) > 1 and time_series.shape[1] == self.n_features
-        ), "Not all observations are given in time series of shape: "
+        ), f"Not all features ({self.n_features}) are given in time series of shape: "
         f"{time_series.shape}"
 
         for dim in range(self.n_features):
