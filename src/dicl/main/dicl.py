@@ -64,7 +64,7 @@ class DICL:
         self.iclearner = MultiVariateICLTrainer(
             model=model,
             tokenizer=tokenizer,
-            n_observations=n_components,
+            n_features=n_components,
             rescale_factor=rescale_factor,
             up_shift=up_shift,
         )
