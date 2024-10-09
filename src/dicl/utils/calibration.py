@@ -23,7 +23,7 @@ def compute_ks_metric(
     n_traces: int = 100,
     up_shift: float = 1.5,
     rescale_factor: float = 7.0,
-    burnin: int = 0
+    burnin: int = 0,
 ):
     """
     Computes the KS metric for a given model and test dataset.
