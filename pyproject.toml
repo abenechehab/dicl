@@ -4,7 +4,15 @@ requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
 [project]
 name = "DICL"
 authors = [
-   {name = "Abdelhakim Benechehab", email = "abdelhakim.benechehab@gmail.com"},
+  {name = "Abdelhakim Benechehab", email = "abdelhakim.benechehab@gmail.com"},
+  {name = "Youssef Attia El Hili", email = "youssef.attia.hili1@huawei.com"},
+  {name = "Ambroise Odonnat", email = "ambroiseodonnattechnologie@gmail.com"},
+  {name = "Oussama Zekri", email = "oussama.zekri@ens-paris-saclay.fr"},
+  {name = "Albert Thomas", email = "albert.thomas@huawei.com"},
+  {name = "Giuseppe Paolo", email = "giuseppe.paolo@huawei.com"},
+  {name = "Maurizio Filippone", email = "maurizio.filippone@kaust.edu.sa"},
+  {name = "Ievgen Redko", email = "ievgen.redko@huawei.com"},
+  {name = "Balàzs Kègl", email = "balazs.kegl@huawei.com"},
 ]
 maintainers = [
   {name = "Abdelhakim Benechehab", email = "abdelhakim.benechehab@gmail.com"},
