@@ -79,7 +79,11 @@ class Args:
     # Custom
     save_policy_checkpoints: int = 1000000
     act_deterministically: bool = False
+    # algo logic
+    interact_every: int = 1
     # icl
+    method: str = 'vicl'
+    dicl_pca_n_components: int = -1
     context_length: int = 300
     rescale_factor: float = 7.0
     up_shift: float = 1.5
@@ -95,9 +99,6 @@ class Args:
     if_true_mean_else_mode: bool = False
     llm_percentage_to_keep: int = 20
     auxiliary_actions: bool = False
-
-    # algo logic
-    interact_every: int = 1
 
 
 class TruncReplayBuffer(ReplayBuffer):
@@ -464,7 +465,7 @@ def main():
     # ----------------------------------------------------------------------------------
 
     # ----------- define n_observations and n_actions -----------
-    # n_observations = envs.single_observation_space.shape[0]
+    n_observations = envs.single_observation_space.shape[0]
     # n_actions = envs.single_action_space.shape[0]
 
     # other counters
@@ -607,21 +608,59 @@ def main():
                             - 1,
                         )
                     )
-                    time_series = rb.observations[
-                        start_index : start_index + args.context_length
-                    ]
-                    time_series = time_series.reshape((args.context_length, -1))
-
                     # 1.2. Do ICL
+                    if args.method=='vicl':
+                        time_series = rb.observations[
+                            start_index : start_index + args.context_length
+                        ]
+                        time_series = time_series.reshape((args.context_length, -1))
+                        DICL = dicl.vICL(
+                            n_components=time_series.shape[1],
+                            n_features=time_series.shape[1],
+                            model=model,
+                            tokenizer=tokenizer,
+                            rescale_factor=args.rescale_factor,
+                            up_shift=args.up_shift,
+                        )
+                    elif args.method=='dicl_s_pca':
+                        time_series = rb.observations[
+                            start_index : start_index + args.context_length
+                        ]
+                        time_series = time_series.reshape((args.context_length, -1))
+                        DICL = dicl.DICL_PCA(
+                            n_components=time_series.shape[1]
+                            if args.dicl_pca_n_components == -1
+                            else args.dicl_pca_n_components,
+                            n_features=time_series.shape[1],
+                            model=model,
+                            tokenizer=tokenizer,
+                            rescale_factor=args.rescale_factor,
+                            up_shift=args.up_shift,
+                        )
+                    elif args.method=='dicl_sa_pca':
+                        time_series = np.concatenate(
+                            [
+                                rb.observations[
+                                    start_index : start_index + args.context_length
+                                ],
+                                rb.actions[
+                                    start_index : start_index + args.context_length
+                                ],
+                            ],
+                            axis=-1
+                        )
+                        time_series = time_series.reshape((args.context_length, -1))
+                        DICL = dicl.DICL_PCA(
+                            n_components=time_series.shape[1]
+                            if args.dicl_pca_n_components == -1
+                            else args.dicl_pca_n_components,
+                            n_features=time_series.shape[1],
+                            model=model,
+                            tokenizer=tokenizer,
+                            rescale_factor=args.rescale_factor,
+                            up_shift=args.up_shift,
+                        )
 
-                    DICL = dicl.DICL_PCA(
-                        n_components=time_series.shape[1],
-                        n_features=time_series.shape[1],
-                        model=model,
-                        tokenizer=tokenizer,
-                        rescale_factor=args.rescale_factor,
-                        up_shift=args.up_shift,
-                    )
                     DICL.fit_disentangler(X=time_series)
                     mean, mode, lb, ub = DICL.predict_single_step(X=time_series)
 
@@ -631,7 +670,7 @@ def main():
                     ]
 
                     true_errors = np.linalg.norm(
-                        all_groundtruth.squeeze() - mean, axis=1
+                        all_groundtruth.squeeze() - mean[:,:n_observations], axis=1
                     )
 
                     sorted_indices = true_errors.argsort()
@@ -642,8 +681,8 @@ def main():
                     for t in range(args.burnin_llm, args.context_length):
                         if t in sorted_indices[:n_to_keep]:
                             # 1.3. New transition created by llm prediction
-                            llm_next_obs = mean[t, :].reshape((1, -1))
-                            llm_obs = time_series[t].reshape((1, -1))
+                            llm_next_obs = mean[t, :n_observations].reshape((1, -1))
+                            llm_obs = time_series[t, :n_observations].reshape((1, -1))
                             llm_actions = rb.actions[start_index + t].reshape((1, -1))
                             llm_rewards = rb.rewards[start_index + t].reshape((1,))
                             llm_terminations = np.zeros((1,))
