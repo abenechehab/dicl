@@ -393,20 +393,20 @@ class DICL:
             )
             ax.plot(
                 np.arange(
-                    self.context_length - self.prediction_horizon,
+                    self.context_length - self.prediction_horizon - 1,
                     self.context_length - 1,
                 ),
-                self.mean[-self.prediction_horizon + 1 :, dim],
+                self.mean[-self.prediction_horizon :, dim],
                 label="multi-step",
                 color=sns.color_palette("colorblind")[1],
             )
             ax.fill_between(
                 np.arange(
-                    self.context_length - self.prediction_horizon,
+                    self.context_length - self.prediction_horizon - 1,
                     self.context_length - 1,
                 ),
-                y1=self.lb[-self.prediction_horizon + 1 :, dim],
-                y2=self.ub[-self.prediction_horizon + 1 :, dim],
+                y1=self.lb[-self.prediction_horizon :, dim],
+                y2=self.ub[-self.prediction_horizon :, dim],
                 alpha=0.3,
                 color=sns.color_palette("colorblind")[1],
             )
