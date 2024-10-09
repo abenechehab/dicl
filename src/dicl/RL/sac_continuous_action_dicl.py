@@ -372,7 +372,9 @@ class Actor(nn.Module):
         return action, log_prob, mean
 
 
-def main(args: Args):
+def main():
+    args = tyro.cli(Args)
+
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
 
     writer = SummaryWriter(f"{args.path}/runs/{run_name}")
@@ -795,5 +797,4 @@ def main(args: Args):
 
 
 if __name__ == "__main__":
-    args = tyro.cli(Args)
-    main(args)
+    main()
