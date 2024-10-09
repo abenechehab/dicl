@@ -47,6 +47,7 @@ class Args:
     """whether to capture videos of the agent performances
         (check out `videos` folder)"""
     path: str = "."
+    """the path where the experiment will be saved"""
 
     # Algorithm specific arguments
     env_id: str = "Hopper-v4"
@@ -78,27 +79,41 @@ class Args:
 
     # Custom
     save_policy_checkpoints: int = 1000000
+    """frequency of saving policy checkpoints"""
     act_deterministically: bool = False
+    """whether to act deterministically"""
     # algo logic
     interact_every: int = 1
+    """frequency of policy-environment interactions (update frequency)"""
     # icl
-    method: str = 'vicl'
+    method: str = "vicl"
+    """the method used for in-context learning"""
     dicl_pca_n_components: int = -1
+    """number of components for PCA in DICL"""
     context_length: int = 300
+    """length of the context"""
     rescale_factor: float = 7.0
+    """factor to rescale the input"""
     up_shift: float = 1.5
+    """value to shift the input upwards"""
     llm_learning_starts: int = learning_starts * 2
+    """timestep to start learning for the LLM"""
     llm_learning_frequency: int = 32
+    """frequency of learning for the LLM"""
     llm_batch_size: int = 25
+    """batch size for the LLM"""
     train_only_from_llm: bool = False
+    """whether to train only from the LLM"""
     min_episodes_to_start_icl: int = 5
-    llm_icl_parallel: bool = False
+    """minimum number of episodes to start in-context learning"""
     burnin_llm: int = 0
+    """number of burn-in steps for the LLM"""
     add_init_burin_steps_to_llm: bool = False
-    stochastic_llm: bool = True
-    if_true_mean_else_mode: bool = False
-    llm_percentage_to_keep: int = 20
-    auxiliary_actions: bool = False
+    """whether to add initial burn-in steps to the LLM"""
+    llm_percentage_to_keep: int = 100
+    """percentage of LLM data to keep"""
+    auxiliary_actions: bool = True
+    """whether to use auxiliary actions"""
 
 
 class TruncReplayBuffer(ReplayBuffer):

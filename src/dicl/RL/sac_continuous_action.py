@@ -59,10 +59,12 @@ class Args:
 
     # Custom
     save_policy_checkpoints: int = 1000000
+    """frequency of saving policy checkpoints"""
     act_deterministically: bool = False
-
+    """whether to act deterministically"""
     # algo logic
     interact_every: int = 1
+    """frequency of policy-environment interactions (update frequency)"""
 
 
 def make_env(env_id, seed, idx, capture_video, run_name):
