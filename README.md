@@ -53,7 +53,7 @@ pip install -e .[rl]
 ## Getting started
 
 ### DICL:
-- Try our multivariate time series forecasting method (DICL) using the [getting started notebook](https://rnd-gitlab-eu.huawei.com/Noahs-Ark/research_projects/dicl/-/blob/main/src/dicl/getting_started.ipynb).
+- Try our multivariate time series forecasting method (DICL) using the [getting started notebook](https://rnd-gitlab-eu.huawei.com/Noahs-Ark/research_projects/dicl/-/blob/main/getting_started.ipynb).
 
 ### DICL-SAC:
 - Install the RL optional dependencies then run the command *dicl-sac*.
@@ -82,7 +82,7 @@ sac --seed $RANDOM --env-id "Pendulum" --total-timesteps 10000 --exp_name "test_
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for more details.
+This project is licensed under the MIT License. See the [LICENSE](https://rnd-gitlab-eu.huawei.com/Noahs-Ark/research_projects/dicl/-/blob/main/LICENSE) file for more details.
 
 ## Open-source Participation
 
