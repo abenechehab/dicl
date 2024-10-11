@@ -86,6 +86,8 @@ class Args:
     interact_every: int = 1
     """frequency of policy-environment interactions (update frequency)"""
     # icl
+    llm_model: str = "meta-llama/Llama-3.1-8B"
+    """the LLM used for in-context learning"""
     method: str = "vicl"
     """the method used for in-context learning"""
     dicl_pca_n_components: int = -1
@@ -244,26 +246,6 @@ class TruncReplayBuffer(ReplayBuffer):
         if self.pos == self.buffer_size:
             self.full = True
             self.pos = 0
-
-    # def save(
-    #     self,
-    # ):
-    #     # with open('test.npy', 'wb') as f:
-    #     #     np.save(f, np.array([1, 2]))
-    #     #     np.save(f, np.array([1, 3]))
-    #     # with open('test.npy', 'rb') as f:
-    #     #     a = np.load(f)
-    #     #     b = np.load(f)
-    #     # print(a, b)
-
-    #     with open(f"{args.path}/runs/{run_name}/replay_buffer.npy", "wb") as f:
-    #         np.save(f, self.observations[: self.pos])
-    #         np.save(f, self.next_observations[: self.pos])
-    #         np.save(f, self.actions[: self.pos])
-    #         np.save(f, self.rewards[: self.pos])
-    #         np.save(f, self.dones[: self.pos])
-
-    #     return
 
 
 class CSVLogger:
@@ -464,24 +446,19 @@ def main():
 
     # ------------------------------ load model and tokenizer --------------------------
     tokenizer = AutoTokenizer.from_pretrained(
-        "/mnt/vdb/hugguingface/hub/models--meta-llama--Llama-3.2-1B/snapshots/"
-        "5d853ed7d16ac794afa8f5c9c7f59f4e9c950954",
+        args.llm_model,
         use_fast=False,
     )
-    print("finish loading tokenizer")
     model = LlamaForCausalLM.from_pretrained(
-        "/mnt/vdb/hugguingface/hub/models--meta-llama--Llama-3.2-1B/snapshots/"
-        "5d853ed7d16ac794afa8f5c9c7f59f4e9c950954",
+        args.llm_model,
         device_map="auto",
         torch_dtype=torch.float16,
     )
-    print("finish loading model")
     model.eval()
     # ----------------------------------------------------------------------------------
 
     # ----------- define n_observations and n_actions -----------
     n_observations = envs.single_observation_space.shape[0]
-    # n_actions = envs.single_action_space.shape[0]
 
     # other counters
     started_sampling = False
@@ -491,7 +468,6 @@ def main():
     obs, _ = envs.reset(seed=args.seed)
     episode_step = 0
     global_step = 0
-    # for global_step in tqdm(range(args.total_timesteps), desc='global_step'):
     pbar = tqdm(total=args.total_timesteps)
     while global_step <= args.total_timesteps:
         # SAVE ACTOR CHECKPOINTS
@@ -829,7 +805,6 @@ def main():
                         "losses/actor_loss", actor_loss.item(), global_step
                     )
                     writer.add_scalar("losses/alpha", alpha, global_step)
-                    # print("SPS:", int(global_step / (time.time() - start_time)))
                     writer.add_scalar(
                         "charts/SPS",
                         int(global_step / (time.time() - start_time)),
