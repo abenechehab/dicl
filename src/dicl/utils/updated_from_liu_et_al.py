@@ -1,3 +1,16 @@
+"""
+The functions and classes in this file are either copied or modified from the
+repository of the paper: "LLMs learn governing principles of dynamical systems,
+revealing an in-context neural scaling law" (https://arxiv.org/abs/2402.00795)
+link of the github repo: https://github.com/AntonioLiu97/llmICL
+By:
+- Toni J.B. Liu, jl3499@cornell.edu
+- Nicolas Boullé, nb690@cam.ac.uk
+- Raphaël Sarfati, raphael.sarfati@cornell.edu
+- Christopher J. Earls, earls@cornell.edu
+"""
+
+
 from functools import partial
 import numpy as np
 from dataclasses import dataclass
