@@ -18,11 +18,11 @@ Our experiments further demonstrate that our approach produces well-calibrated u
 
 
 ## Directory structure
-An overview of the repository's structure and contents (inside /src/dicl/):
+An overview of the repository's structure and contents (inside `/src/dicl/`):
 
-- `main/`: Contains classes for the ICLTrainer and DICL. Objects of type ICLTrainer have methods to update the LLM context with a time series, call the LLM, collect the predicted PDFs, compute statistics, etc. Objects of type DICL have methods to fit the disentangler, predict single-step or multi-step, compute metrics (MSE and KS), and plot the results.
-- `RL/`: Contains scripts for the SAC baseline and our algorithm **DICL-SAC**.
-- `data/`: A sample dataset from the D4RL dataset of the HalfCheetah environment for the demo.
+- `main/`: Contains classes for the `ICLTrainer` and `DICL`. Objects of type `ICLTrainer` have methods to update the LLM context with a time series, call the LLM, collect the predicted probability density functions, compute statistics, etc. Objects of type `DICL` have methods to fit the disentangler, predict single-step or multi-step, compute metrics (MSE and KS), and plot the results.
+- `rl/`: Contains scripts to run the SAC baseline and **DICL-SAC**.
+- `data/`: A sample dataset from the D4RL dataset of the HalfCheetah environment for the [getting started notebook](getting_started.ipynb).
 - `utils/`: Helper functions and classes.
 
 
@@ -36,45 +36,39 @@ conda create -n dicl python=3.9
 ```
 conda activate dicl
 ```
-- install the package
+- to run the [getting started notebook](getting_started.ipynb), install the package
 ```
-pip install -e .
+pip install .
 ```
-- [optional] for developers, install the optional dependencies
+- to run the **DICL-SAC** reinforcement learning algorithm, install the optional dependencies
+```
+pip install .[rl]
+```
+- for developers, install the optional dependencies
 ```
 pip install -e .[dev]
 pre-commit install
 ```
-- [optional] for **DICL-SAC**, install the optional dependencies
-```
-pip install -e .[rl]
-```
 
 ## Getting started
 
-### DICL:
-- Try our multivariate time series forecasting method (DICL) using the [getting started notebook](https://rnd-gitlab-eu.huawei.com/Noahs-Ark/research_projects/dicl/-/blob/main/getting_started.ipynb).
+### DICL
+- Try our multivariate time series forecasting method (DICL) using the [getting started notebook](getting_started.ipynb).
 
-### DICL-SAC:
-- Install the RL optional dependencies then run the command *dicl-sac*.
-- Example:
-
+### DICL-SAC
+- Install the RL optional dependencies then run the command *dicl-sac*. For instance,
 ```
-dicl-sac --seed $RANDOM --env-id Pendulum --total-timesteps 10000 --exp_name "test" --batch_size 64 --llm_batch_size 7 --llm_learning_frequency 16 --context_length 197 --interact_every 200 --learning_starts 1000 --llm_learning_starts 2000
+dicl-sac --seed $RANDOM --env-id Pendulum --total-timesteps 10000 --exp_name "test" --batch_size 64 --llm_batch_size 7 --llm_learning_frequency 16 --context_length 197 --interact_every 200 --learning_starts 1000 --llm_learning_starts 2000 --llm_model 'meta-llama/Llama-3.2-1B'
 ```
-
-- Arguments:
+- Arguments
 
 ![main figure](figures/dicl_sac_args.PNG)
 
 ### SAC (baseline):
 - Run the command *sac*.
-- Example:
-
 ```
 sac --seed $RANDOM --env-id "Pendulum" --total-timesteps 10000 --exp_name "test_baseline" --interact_every 200 --batch_size 64 --learning_starts 1000
 ```
-
 - Arguments:
 
 ![main figure](figures/sac_args.PNG)
@@ -82,7 +76,7 @@ sac --seed $RANDOM --env-id "Pendulum" --total-timesteps 10000 --exp_name "test_
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](https://rnd-gitlab-eu.huawei.com/Noahs-Ark/research_projects/dicl/-/blob/main/LICENSE) file for more details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
 
 ## Open-source Participation
 
@@ -90,9 +84,7 @@ Do not hesitate to contribute to this project by submitting pull requests or iss
 
 ## Credits
 
-- We would like to thank **CleanRL** for providing the SAC implementations used in this project (also **DICL-SAC** is implemented following cleanrl principles).
-- We also acknowledge the work done in [LLMs learn governing principles of dynamical systems, revealing an in-context neural scaling law](https://github.com/AntonioLiu97/llmICL), from which we have integrated certain [functions](https://rnd-gitlab-eu.huawei.com/Noahs-Ark/research_projects/dicl/-/blob/main/src/dicl/utils/updated_from_liu_et_al.py) into our implementation.
+- We would like to thank **CleanRL** for providing the SAC implementations used in this project (also **DICL-SAC** is implemented following `cleanrl` principles).
+- We also acknowledge the work done in [LLMs learn governing principles of dynamical systems, revealing an in-context neural scaling law](https://github.com/AntonioLiu97/llmICL), from which we have integrated certain [functions](src/dicl/utils/updated_from_liu_et_al.py) into our implementation.
 
 ---
-
-For any questions or suggestions, feel free to contact **Abdelhakim Benechehab** at [abdelhakim.benechehab@gmail.com](mailto:abdelhakim.benechehab@gmail.com).

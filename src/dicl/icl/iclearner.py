@@ -68,7 +68,7 @@ class MultiVariateICLTrainer(ICLTrainer):
     ):
         """
         MultiVariateICLTrainer is an implementation of ICLTrainer for multivariate time
-            series data.
+        series data.
         It uses an LLM to process time series and make predictions.
 
         Args:
