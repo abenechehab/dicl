@@ -9,8 +9,6 @@ from tqdm import tqdm
 import numpy as np
 from numpy.typing import NDArray
 
-from scipy.special import erf
-
 from dicl.utils.updated_from_liu_et_al import (
     serialize_arr,
     SerializerSettings,
@@ -37,12 +35,6 @@ class ICLObject:
     mean_arr: Optional[NDArray[np.float32]] = None
     mode_arr: Optional[NDArray[np.float32]] = None
     sigma_arr: Optional[NDArray[np.float32]] = None
-    moment_3_arr: Optional[NDArray[np.float32]] = None
-    moment_4_arr: Optional[NDArray[np.float32]] = None
-    kurtosis_arr: Optional[NDArray[np.float32]] = None
-    kurtosis_error: Optional[NDArray[np.float32]] = None
-    discrete_BT_loss: Optional[NDArray[np.float32]] = None
-    discrete_KL_loss: Optional[NDArray[np.float32]] = None
 
 
 class ICLTrainer(ABC):
@@ -74,6 +66,20 @@ class MultiVariateICLTrainer(ICLTrainer):
         rescale_factor: float = 7.0,
         up_shift: float = 1.5,
     ):
+        """
+        MultiVariateICLTrainer is an implementation of ICLTrainer for multivariate time
+            series data.
+        It uses an LLM to process time series and make predictions.
+
+        Args:
+            model (AutoModel): The LLM model used for ICL.
+            tokenizer (AutoTokenizer): Tokenizer associated with the model.
+            n_features (int): Number of features in the time series data.
+            rescale_factor (float, optional): Rescaling factor for data normalization.
+                Default is 7.0.
+            up_shift (float, optional): Shift value applied after rescaling.
+                Default is 1.5.
+        """
         self.model: "AutoModel" = model
         self.tokenizer: "AutoTokenizer" = tokenizer
 
@@ -97,6 +103,23 @@ class MultiVariateICLTrainer(ICLTrainer):
         context_length: Optional[int] = None,
         update_min_max: bool = True,
     ):
+        """
+        Updates the context (internal state) with the given time series data.
+
+        Args:
+            time_series (NDArray[np.float32]): Input time series data.
+            mean_series (NDArray[np.float32]): Mean of the time series data.
+            sigma_series (NDArray[np.float32]): Standard deviation of the time series
+                data. (only relevant if the stochastic data generation process is known)
+            context_length (Optional[int], optional): The length of the time series.
+                If None, the full time series length is used.
+            update_min_max (bool, optional): Whether to update the minimum and maximum
+                rescaling values. Default is True.
+
+        Returns:
+            List[ICLObject]: A list of ICLObject instances representing the updated
+                internal state for each feature.
+        """
         if context_length is not None:
             self.context_length = context_length
         else:
@@ -160,6 +183,28 @@ class MultiVariateICLTrainer(ICLTrainer):
         verbose: int = 0,
         if_true_mean_else_mode: bool = False,
     ):
+        """
+        Performs In-Context Learning (ICL) using the LLM for multivariate time series.
+
+        Args:
+            temperature (float, optional): Sampling temperature for predictions.
+                Default is 1.0.
+            n_states (int, optional): Number of possible states for the PDF prediction.
+                Default is 1000.
+            stochastic (bool, optional): If True, stochastic sampling is used for
+                predictions. Default is False.
+            use_cache (bool, optional): If True, uses cached key values to improve
+                efficiency. Default is False.
+            verbose (int, optional): Verbosity level for progress tracking.
+                Default is 0.
+            if_true_mean_else_mode (bool, optional): Whether to use the true mean or
+                mode for prediction (only relevant if stochastic=False).
+                Default is False.
+
+        Returns:
+            List[ICLObject]: A list of ICLObject instances with updated PDFs and
+                predictions for each feature.
+        """
         self.use_cache = use_cache
         for dim in tqdm(
             range(self.n_features), desc="icl / state dim", disable=not bool(verbose)
@@ -201,7 +246,17 @@ class MultiVariateICLTrainer(ICLTrainer):
 
         return self.icl_object
 
-    def compute_statistics(self, compute_BT_and_KL: bool = False):
+    def compute_statistics(
+        self,
+    ):
+        """
+        Computes statistics (mean, mode, and sigma) for the predicted PDFs in the
+            internal state.
+
+        Returns:
+            List[ICLObject]: A list of ICLObject instances with computed statistics for
+                each feature.
+        """
         for dim in range(self.n_features):
             PDF_list = self.icl_object[dim].PDF_list
 
@@ -211,51 +266,22 @@ class MultiVariateICLTrainer(ICLTrainer):
             mean_arr = []
             mode_arr = []
             sigma_arr = []
-            moment_3_arr = []
-            moment_4_arr = []
-            discrete_BT_loss = []
-            discrete_KL_loss = []
             for PDF, PDF_true, true_mean, true_sigma in zip(
                 PDF_list,
                 PDF_true_list,
                 self.icl_object[dim].rescaled_true_mean_arr,
                 self.icl_object[dim].rescaled_true_sigma_arr,
             ):
-                if compute_BT_and_KL:
-
-                    def cdf(x):
-                        return 0.5 * (
-                            1 + erf((x - true_mean) / (true_sigma * np.sqrt(2)))
-                        )
-
-                    PDF_true.discretize(cdf, mode="cdf")
-                    PDF_true.compute_stats()
-
-                    discrete_BT_loss.append(PDF_true.BT_dist(PDF))
-                    discrete_KL_loss.append(PDF_true.KL_div(PDF))
-
                 PDF.compute_stats()
                 mean, mode, sigma = PDF.mean, PDF.mode, PDF.sigma
-                moment_3 = PDF.compute_moment(3)
-                moment_4 = PDF.compute_moment(4)
 
                 mean_arr.append(mean)
                 mode_arr.append(mode)
                 sigma_arr.append(sigma)
-                moment_3_arr.append(moment_3)
-                moment_4_arr.append(moment_4)
-
-            kurtosis_arr = np.array(moment_4_arr) / np.array(sigma_arr) ** 4
 
             self.icl_object[dim].mean_arr = np.array(mean_arr)
             self.icl_object[dim].mode_arr = np.array(mode_arr)
             self.icl_object[dim].sigma_arr = np.array(sigma_arr)
-            self.icl_object[dim].moment_3_arr = np.array(moment_3_arr)
-            self.icl_object[dim].moment_4_arr = np.array(moment_4_arr)
-            self.icl_object[dim].kurtosis_arr = kurtosis_arr
-            self.icl_object[dim].kurtosis_error = (kurtosis_arr - 3) ** 2
-            self.icl_object[dim].discrete_BT_loss = np.array(discrete_BT_loss)
-            self.icl_object[dim].discrete_KL_loss = np.array(discrete_KL_loss)
         return self.icl_object
 
     def predict_long_horizon_llm(
@@ -267,8 +293,24 @@ class MultiVariateICLTrainer(ICLTrainer):
         if_true_mean_else_mode: bool = False,
     ):
         """
-        Predict h steps into the future by appending the previous prediction to the
-        time series.
+        Predicts multiple steps into the future by autoregressively using previous
+        predictions.
+
+        Args:
+            prediction_horizon (int): The number of future steps to predict.
+            temperature (float, optional): Sampling temperature for predictions.
+                Default is 1.0.
+            stochastic (bool, optional): If True, stochastic sampling is used for
+                predictions. Default is False.
+            verbose (int, optional): Verbosity level for progress tracking.
+                Default is 0.
+            if_true_mean_else_mode (bool, optional): Whether to use the true mean or
+                mode for predictions (only relevant if stochastic=False).
+                Default is False.
+
+        Returns:
+            List[ICLObject]: A list of ICLObject instances with the predicted time
+                series and computed statistics.
         """
         last_prediction = copy.copy(
             np.concatenate(
