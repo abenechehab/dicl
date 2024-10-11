@@ -26,18 +26,29 @@ def compute_ks_metric(
     burnin: int = 0,
 ):
     """
-    Computes the KS metric for a given model and test dataset.
+    Computes the Kolmogorov-Smirnov (KS) metric between the predicted and ground truth
+    values for each feature in a multivariate time series.
 
-    Parameters:
-    - X_test: DataFrame containing ground truth values.
-    - model: A model that predicts a categorical distribution over a discretization of
-        the ground truth variable.
-    - target_column_names: List of target column names in X_test.
-    - n_traces: Number of traces (samples) to generate for each prediction.
-    - future_length: Number of future time steps to predict.
+    Args:
+        groundtruth (NDArray): The ground truth values for the time series.
+        icl_object (ICLObject): The ICL object containing predicted PDFs.
+        n_components (int): Number of components in the model predictions.
+        n_features (int): Number of features in the time series.
+        inverse_transform (Callable): A function to inverse-transform the predictions to
+            the time series oiginal space.
+        n_traces (int, optional): Number of trace samples to generate for each
+            prediction. Default is 100.
+        up_shift (float, optional): Up-shift value applied during rescaling.
+            Default is 1.5.
+        rescale_factor (float, optional): Rescale factor applied during normalization.
+            Default is 7.0.
+        burnin (int, optional): Number of initial time steps to exclude from the metric
+            computation. Default is 0.
 
     Returns:
-    - kss: Array containing the KS metrics for each target and horizon.
+        Tuple[NDArray, NDArray]:
+            - `kss`: Array containing the KS metrics for each feature.
+            - `ks_quantiles`: Array of KS quantiles for each feature and time step.
     """
 
     n_samples = len(icl_object[0].PDF_list)
@@ -98,6 +109,25 @@ def ks_cdf(
     pot_cdf_uniform: bool = True,
     label: str = "",
 ):
+    """
+    Plots the cumulative distribution function (CDF) of the KS quantiles for a given
+        dimension, and compares it with the uniform CDF.
+
+    Args:
+        ks_quantiles (NDArray): Array of KS quantiles computed for each feature and
+            time step.
+        dim (int): The dimension (feature) for which to plot the CDF.
+        ax (Axes): The Matplotlib Axes object on which to plot the CDF.
+        verbose (int, optional): Verbosity level. If greater than 0, additional
+            information will be printed. Default is 0.
+        color (Any, optional): Color of the CDF plot. Default is "b" (blue).
+        pot_cdf_uniform (bool, optional): Whether to plot the uniform CDF for
+            comparison. Default is True.
+        label (str, optional): Label for the plot. Default is an empty string.
+
+    Returns:
+        None. The CDF plot is drawn on the provided Axes object.
+    """
     quantiles = ks_quantiles[dim]
 
     x = quantiles
