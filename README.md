@@ -30,11 +30,11 @@ An overview of the repository's structure and contents (inside /src/dicl/):
 
 - create a conda environment:
 ```
-conda create -n DICL python=3.9
+conda create -n dicl python=3.9
 ```
 - activate the environment:
 ```
-conda activate DICL
+conda activate dicl
 ```
 - install the package
 ```
