@@ -12,7 +12,7 @@ authors = [
   {name = "Giuseppe Paolo", email = "giuseppe.paolo@huawei.com"},
   {name = "Maurizio Filippone", email = "maurizio.filippone@kaust.edu.sa"},
   {name = "Ievgen Redko", email = "ievgen.redko@huawei.com"},
-  {name = "Balàzs Kègl", email = "balazs.kegl@huawei.com"},
+  {name = "Balázs Kégl", email = "balazs.kegl@gmail.com"},
 ]
 maintainers = [
   {name = "Abdelhakim Benechehab", email = "abdelhakim.benechehab@gmail.com"},
