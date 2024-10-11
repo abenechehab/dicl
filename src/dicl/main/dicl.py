@@ -20,6 +20,24 @@ if TYPE_CHECKING:
 
 class IdentityTransformer(BaseEstimator, TransformerMixin):
     def __init__(self):
+        """
+        A custom scikit-learn transformer that performs no operation on the data.
+        This is useful for the vICL variant of DICL.
+
+        Methods:
+            fit(
+                input_array: NDArray, y: Optional[NDArray] = None
+            ) -> IdentityTransformer:
+                Fits the transformer (no-op in this case), returning the instance
+                itself.
+
+            transform(input_array: NDArray, y: Optional[NDArray] = None) -> NDArray:
+                Returns the input data without modification.
+
+            inverse_transform(
+                input_array: NDArray, y: Optional[NDArray] = None) -> NDArray:
+                    Returns the input data without modification.
+        """
         pass
 
     def fit(self, input_array: NDArray, y: Optional[NDArray] = None):
@@ -35,6 +53,55 @@ class IdentityTransformer(BaseEstimator, TransformerMixin):
 
 
 class DICL:
+    """
+    DICL (Disentangled In-Context Learning) is a time-series forecasting model that
+    leverages a disentangler and a foundational model (LLM) for time series forecasting.
+
+    Methods:
+        fit_disentangler(X: NDArray):
+            Fit the disentangler on the input data.
+
+        transform(X: NDArray) -> NDArray:
+            Transform the input data using the disentangler.
+
+        inverse_transform(X_transformed: NDArray) -> NDArray:
+            Inverse transform the data back to the original space after disentangling.
+
+        predict_single_step(X: NDArray) -> Tuple[NDArray, ...]:
+            Perform single-step time series prediction using the model.
+
+        predict_multi_step(
+            X: NDArray,
+            prediction_horizon: int,
+            stochastic: bool = False,
+            if_true_mean_else_mode: bool = False
+        ) -> Tuple[NDArray, ...]:
+            Perform multi-step time series prediction for the given horizon.
+
+        compute_metrics(burnin: int = 0) -> dict:
+            Compute evaluation metrics (e.g., MSE, KS test) after prediction.
+
+        plot_single_step(
+            feature_names: Optional[List[str]] = None,
+            xlim: Optional[List[float]] = None,
+            savefigpath: Optional[str] = None
+        ):
+            Plot single-step predictions and ground truth time series.
+
+        plot_multi_step(
+            feature_names: Optional[List[str]] = None,
+            xlim: Optional[List[float]] = None,
+            savefigpath: Optional[str] = None
+        ):
+            Plot multi-step predictions and ground truth time series.
+
+        plot_calibration(
+            feature_names: Optional[List[str]] = None,
+            savefigpath: Optional[str] = None,
+            burnin: int = 0
+        ):
+            Plot the calibration curves based on the KS test for different features.
+    """
     def __init__(
         self,
         disentangler: Any,
@@ -46,12 +113,19 @@ class DICL:
         up_shift: float = 1.5,
     ):
         """
-        Initialize the TimeSeriesForecaster with a disentangler and an iclearner.
+        Initialize the DICL model with the specified disentangler, model, and
+        hyperparameters.
 
-        Parameters:
-            disentangler (object): An object that has `transform` and
-            `inverse_transform` methods.
-        iclearner (object): An object that has a `forecast` method.
+        Args:
+            disentangler (Any): The disentangler or preprocessor pipeline.
+            n_features (int): Number of input features.
+            n_components (int): Number of independent components to be learned.
+            model (AutoModel): Pretrained model used for time series prediction.
+            tokenizer (AutoTokenizer): Tokenizer associated with the pretrained model.
+            rescale_factor (float, optional): Rescaling factor for the transformed data.
+                Defaults to 7.0.
+            up_shift (float, optional): Shift factor applied to rescaled data.
+                Defaults to 1.5.
         """
 
         self.n_features = n_features
@@ -75,8 +149,8 @@ class DICL:
         """
         Fit the disentangler on the input data.
 
-        Parameters:
-        X (numpy.ndarray): The input time series data.
+        Args:
+            X (NDArray): Input time series data.
         """
         self.disentangler.fit(X)
 
@@ -84,36 +158,36 @@ class DICL:
         """
         Transform the input data using the disentangler.
 
-        Parameters:
-        X (numpy.ndarray): The input time series data.
+        Args:
+            X (NDArray): Input time series data to be transformed.
 
         Returns:
-        numpy.ndarray: The transformed time series data.
+            NDArray: Transformed data.
         """
         return self.disentangler.transform(X)
 
     def inverse_transform(self, X_transformed: NDArray) -> NDArray:
         """
-        Inverse transform the data back to the original space.
+        Inverse transform the data back to its original representation.
 
-        Parameters:
-        X_transformed (numpy.ndarray): The transformed time series data.
+        Args:
+            X_transformed (NDArray): Transformed time series data.
 
         Returns:
-        numpy.ndarray: The original time series data.
+            NDArray: Data transformed back to the original space.
         """
         return self.disentangler.inverse_transform(X_transformed)
 
     def predict_single_step(self, X: NDArray) -> Tuple[NDArray, ...]:
         """
-        Perform time series forecasting.
+        Perform single-step prediction on the input data.
 
-        Parameters:
-        X (numpy.ndarray): The input time series data.
-        horizon (int): The forecasting horizon.
+        Args:
+            X (NDArray): Input time series data.
 
         Returns:
-        numpy.ndarray: The forecasted time series data in the original space.
+            Tuple[NDArray, ...]: Mean, mode, lower bound, and upper bound of the
+                predictions.
         """
         assert (
             X.shape[1] == self.n_features
@@ -179,14 +253,20 @@ class DICL:
         if_true_mean_else_mode: bool = False,
     ) -> Tuple[NDArray, ...]:
         """
-        Perform time series forecasting.
+        Perform multi-step prediction for a given horizon.
 
-        Parameters:
-        X (numpy.ndarray): The input time series data.
-        horizon (int): The forecasting horizon.
+        Args:
+            X (NDArray): Input time series data.
+            prediction_horizon (int): Number of steps to predict into the future
+                (taken from the end of the input time series).
+            stochastic (bool, optional): Whether to apply stochastic predictions.
+                Defaults to False.
+            if_true_mean_else_mode (bool, optional): Whether to return mean predictions
+                (True) or mode predictions (False). Defaults to False.
 
         Returns:
-        numpy.ndarray: The forecasted time series data in the original space.
+            Tuple[NDArray, ...]: Mean, mode, lower bound, and upper bound of the
+                predictions.
         """
         assert (
             X.shape[1] == self.n_features
@@ -255,6 +335,16 @@ class DICL:
         return self.mean, self.mode, self.lb, self.ub
 
     def compute_metrics(self, burnin: int = 0):
+        """
+        Compute the prediction metrics such as MSE and KS test.
+
+        Args:
+            burnin (int, optional): Number of initial steps to ignore when computing
+                metrics. Defaults to 0.
+
+        Returns:
+            dict: Dictionary containing various prediction metrics.
+        """
         metrics = {}
 
         # ------- MSE --------
@@ -290,6 +380,17 @@ class DICL:
         xlim: Optional[List[float]] = None,
         savefigpath: Optional[str] = None,
     ):
+        """
+        Plot single-step predictions against ground truth.
+
+        Args:
+            feature_names (Optional[List[str]], optional): Names of the features.
+                Defaults to None.
+            xlim (Optional[List[float]], optional): X-axis limits.
+                Defaults to None.
+            savefigpath (Optional[str], optional): File path to save the plot.
+                Defaults to None.
+        """
         if not feature_names:
             feature_names = [f"f{i}" for i in range(self.n_features)]
 
@@ -349,6 +450,17 @@ class DICL:
         xlim: Optional[List[float]] = None,
         savefigpath: Optional[str] = None,
     ):
+        """
+        Plot multi-step predictions and ground truth.
+
+        Args:
+            feature_names (Optional[List[str]], optional): Names of the features.
+                Defaults to None.
+            xlim (Optional[List[float]], optional): X-axis limits.
+                Defaults to None.
+            savefigpath (Optional[str], optional): File path to save the plot.
+                Defaults to None.
+        """
         if not feature_names:
             feature_names = [f"f{i}" for i in range(self.n_features)]
 
@@ -427,6 +539,17 @@ class DICL:
         savefigpath: Optional[str] = None,
         burnin: int = 0,
     ):
+        """
+        Plot calibration curves based on the KS test.
+
+        Args:
+            feature_names (Optional[List[str]], optional): Names of the features.
+                Defaults to None.
+            savefigpath (Optional[str], optional): File path to save the plot.
+                Defaults to None.
+            burnin (int, optional): Number of initial steps to ignore when computing
+                calibration. Defaults to 0.
+        """
         kss, ks_quantiles = compute_ks_metric(
             groundtruth=self.X[1:],
             icl_object=self.icl_object,
@@ -487,12 +610,17 @@ class vICL(DICL):
         up_shift: float = 1.5,
     ):
         """
-        Initialize DICL with a PCA disentangler and an iclearner.
+        Initialize DICL with no disentangler (IdentityTransformer).
 
-        Parameters:
-            disentangler (object): An object that has `transform` and
-            `inverse_transform` methods.
-        iclearner (object): An object that has a `predict` method.
+        Args:
+            n_features (int): Number of input features.
+            n_components (int): Number of independent components to be learned.
+            model (AutoModel): Pretrained model used for time series prediction.
+            tokenizer (AutoTokenizer): Tokenizer associated with the pretrained model.
+            rescale_factor (float, optional): Rescaling factor for the transformed data.
+                Defaults to 7.0.
+            up_shift (float, optional): Shift factor applied to rescaled data.
+                Defaults to 1.5.
         """
         assert n_features == n_components, "vICL doesn't support a different number of"
         f" components ({n_components}) than the number of features ({n_features})"
@@ -519,12 +647,17 @@ class DICL_PCA(DICL):
         up_shift: float = 1.5,
     ):
         """
-        Initialize DICL with a PCA disentangler and an iclearner.
+        Initialize DICL with a PCA disentangler.
 
-        Parameters:
-            disentangler (object): An object that has `transform` and
-            `inverse_transform` methods.
-        iclearner (object): An object that has a `predict` method.
+        Args:
+            n_features (int): Number of input features.
+            n_components (int): Number of independent components to be learned.
+            model (AutoModel): Pretrained model used for time series prediction.
+            tokenizer (AutoTokenizer): Tokenizer associated with the pretrained model.
+            rescale_factor (float, optional): Rescaling factor for the transformed data.
+                Defaults to 7.0.
+            up_shift (float, optional): Shift factor applied to rescaled data.
+                Defaults to 1.5.
         """
         super(DICL_PCA, self).__init__(
             disentangler=PCA(n_components=n_components),
