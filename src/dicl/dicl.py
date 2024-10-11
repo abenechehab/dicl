@@ -11,7 +11,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.decomposition import PCA
 
-from dicl.main.iclearner import MultiVariateICLTrainer
+from dicl.icl.iclearner import MultiVariateICLTrainer
 from dicl.utils.calibration import compute_ks_metric, ks_cdf
 
 if TYPE_CHECKING:
@@ -102,6 +102,7 @@ class DICL:
         ):
             Plot the calibration curves based on the KS test for different features.
     """
+
     def __init__(
         self,
         disentangler: Any,

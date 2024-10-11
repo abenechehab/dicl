@@ -10,7 +10,7 @@ from scipy.special import kolmogorov
 from scipy.stats import kstwobign
 
 if TYPE_CHECKING:
-    from dicl.main.iclearner import ICLObject
+    from dicl.icl.iclearner import ICLObject
     from matplotlib.axes import Axes
 
 

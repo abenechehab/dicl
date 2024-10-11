@@ -77,6 +77,7 @@ def make_env(env_id, seed, idx, capture_video, run_name):
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
         return env
+
     return thunk
 
 
@@ -84,8 +85,11 @@ def make_env(env_id, seed, idx, capture_video, run_name):
 class SoftQNetwork(nn.Module):
     def __init__(self, env):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod() +
-                             np.prod(env.single_action_space.shape), 256)
+        self.fc1 = nn.Linear(
+            np.array(env.single_observation_space.shape).prod()
+            + np.prod(env.single_action_space.shape),
+            256,
+        )
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 1)
 
@@ -111,13 +115,17 @@ class Actor(nn.Module):
         # action rescaling
         self.register_buffer(
             "action_scale",
-            torch.tensor((env.action_space.high - env.action_space.low) / 2.0,
-                         dtype=torch.float32)
+            torch.tensor(
+                (env.action_space.high - env.action_space.low) / 2.0,
+                dtype=torch.float32,
+            ),
         )
         self.register_buffer(
             "action_bias",
-            torch.tensor((env.action_space.high + env.action_space.low) / 2.0,
-                         dtype=torch.float32)
+            torch.tensor(
+                (env.action_space.high + env.action_space.low) / 2.0,
+                dtype=torch.float32,
+            ),
         )
 
     def forward(self, x):
@@ -151,8 +159,8 @@ def main():
     writer = SummaryWriter(f"{args.path}/runs/{run_name}")
     writer.add_text(
         "hyperparameters",
-        "|param|value|\n|-|-|\n%s" % ("\n".join(
-            [f"|{key}|{value}|" for key, value in vars(args).items()])),
+        "|param|value|\n|-|-|\n%s"
+        % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
     # save args
     with open(f"{args.path}/runs/{run_name}/args.json", "w") as fout:
@@ -168,9 +176,11 @@ def main():
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
-    assert isinstance(envs.single_action_space, gym.spaces.Box), \
-        "only continuous action space is supported"
+        [make_env(args.env_id, args.seed, 0, args.capture_video, run_name)]
+    )
+    assert isinstance(
+        envs.single_action_space, gym.spaces.Box
+    ), "only continuous action space is supported"
 
     actor = Actor(envs).to(device)
     qf1 = SoftQNetwork(envs).to(device)
@@ -187,7 +197,8 @@ def main():
     # Automatic entropy tuning
     if args.autotune:
         target_entropy = -torch.prod(
-            torch.Tensor(envs.single_action_space.shape).to(device)).item()
+            torch.Tensor(envs.single_action_space.shape).to(device)
+        ).item()
         log_alpha = torch.zeros(1, requires_grad=True, device=device)
         alpha = log_alpha.exp().item()
         a_optimizer = optim.Adam([log_alpha], lr=args.q_lr)
@@ -220,9 +231,12 @@ def main():
             for _ in range(args.interact_every):
                 # ALGO LOGIC: put action logic here
                 if global_step < args.learning_starts:
-                    actions = np.array([
-                        envs.single_action_space.sample() for _ in range(envs.num_envs)
-                    ])
+                    actions = np.array(
+                        [
+                            envs.single_action_space.sample()
+                            for _ in range(envs.num_envs)
+                        ]
+                    )
                 else:
                     actions, _, mean_actions = actor.get_action(
                         torch.Tensor(obs).to(device)
@@ -238,12 +252,16 @@ def main():
                 # TRY NOT TO MODIFY: record rewards for plotting purposes
                 if "final_info" in infos:
                     for info in infos["final_info"]:
-                        print(f"global_step={global_step}, "
-                              f"episodic_return={info['episode']['r']}")
+                        print(
+                            f"global_step={global_step}, "
+                            f"episodic_return={info['episode']['r']}"
+                        )
                         writer.add_scalar(
-                            "charts/episodic_return", info["episode"]["r"], global_step)
+                            "charts/episodic_return", info["episode"]["r"], global_step
+                        )
                         writer.add_scalar(
-                            "charts/episodic_length", info["episode"]["l"], global_step)
+                            "charts/episodic_length", info["episode"]["l"], global_step
+                        )
                         break
 
                 # TRY NOT TO MODIFY: save data to rb; handle `final_observation`
@@ -266,16 +284,21 @@ def main():
                 data = rb.sample(args.batch_size)
                 with torch.no_grad():
                     next_state_actions, next_state_log_pi, _ = actor.get_action(
-                        data.next_observations)
+                        data.next_observations
+                    )
                     qf1_next_target = qf1_target(
-                        data.next_observations, next_state_actions)
+                        data.next_observations, next_state_actions
+                    )
                     qf2_next_target = qf2_target(
-                        data.next_observations, next_state_actions)
-                    min_qf_next_target = torch.min(
-                        qf1_next_target, qf2_next_target) - alpha * next_state_log_pi
+                        data.next_observations, next_state_actions
+                    )
+                    min_qf_next_target = (
+                        torch.min(qf1_next_target, qf2_next_target)
+                        - alpha * next_state_log_pi
+                    )
                     next_q_value = data.rewards.flatten() + (
-                        1 - data.dones.flatten()) * args.gamma * (
-                            min_qf_next_target).view(-1)
+                        1 - data.dones.flatten()
+                    ) * args.gamma * (min_qf_next_target).view(-1)
 
                 qf1_a_values = qf1(data.observations, data.actions).view(-1)
                 qf2_a_values = qf2(data.observations, data.actions).view(-1)
@@ -289,8 +312,8 @@ def main():
                 q_optimizer.step()
 
                 if (
-                    (global_step+local_step) % args.policy_frequency == 0
-                ):  # TD 3 Delayed update support
+                    global_step + local_step
+                ) % args.policy_frequency == 0:  # TD 3 Delayed update support
                     for _ in range(
                         args.policy_frequency
                     ):  # compensate for the delay by doing 'actor_update_interval'
@@ -319,13 +342,17 @@ def main():
                 # update the target networks
                 if (global_step + local_step) % args.target_network_frequency == 0:
                     for param, target_param in zip(
-                        qf1.parameters(), qf1_target.parameters()):
+                        qf1.parameters(), qf1_target.parameters()
+                    ):
                         target_param.data.copy_(
-                            args.tau * param.data + (1 - args.tau) * target_param.data)
+                            args.tau * param.data + (1 - args.tau) * target_param.data
+                        )
                     for param, target_param in zip(
-                        qf2.parameters(), qf2_target.parameters()):
+                        qf2.parameters(), qf2_target.parameters()
+                    ):
                         target_param.data.copy_(
-                            args.tau * param.data + (1 - args.tau) * target_param.data)
+                            args.tau * param.data + (1 - args.tau) * target_param.data
+                        )
 
                 if (global_step + local_step) % 100 == 0:
                     writer.add_scalar(

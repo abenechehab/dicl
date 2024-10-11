@@ -43,6 +43,7 @@ pip install -e .
 - [optional] for developers, install the optional dependencies
 ```
 pip install -e .[dev]
+pre-commit install
 ```
 - [optional] for **DICL-SAC**, install the optional dependencies
 ```

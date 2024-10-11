@@ -25,7 +25,7 @@ from gymnasium import spaces
 
 from transformers import LlamaForCausalLM, AutoTokenizer
 
-from dicl.main import dicl
+from dicl import dicl
 
 try:
     import psutil
@@ -624,7 +624,7 @@ def main():
                         )
                     )
                     # 1.2. Do ICL
-                    if args.method=='vicl':
+                    if args.method == "vicl":
                         time_series = rb.observations[
                             start_index : start_index + args.context_length
                         ]
@@ -637,7 +637,7 @@ def main():
                             rescale_factor=args.rescale_factor,
                             up_shift=args.up_shift,
                         )
-                    elif args.method=='dicl_s_pca':
+                    elif args.method == "dicl_s_pca":
                         time_series = rb.observations[
                             start_index : start_index + args.context_length
                         ]
@@ -652,7 +652,7 @@ def main():
                             rescale_factor=args.rescale_factor,
                             up_shift=args.up_shift,
                         )
-                    elif args.method=='dicl_sa_pca':
+                    elif args.method == "dicl_sa_pca":
                         time_series = np.concatenate(
                             [
                                 rb.observations[
@@ -662,7 +662,7 @@ def main():
                                     start_index : start_index + args.context_length
                                 ],
                             ],
-                            axis=-1
+                            axis=-1,
                         )
                         time_series = time_series.reshape((args.context_length, -1))
                         DICL = dicl.DICL_PCA(
@@ -685,7 +685,7 @@ def main():
                     ]
 
                     true_errors = np.linalg.norm(
-                        all_groundtruth.squeeze() - mean[:,:n_observations], axis=1
+                        all_groundtruth.squeeze() - mean[:, :n_observations], axis=1
                     )
 
                     sorted_indices = true_errors.argsort()
