@@ -40,8 +40,6 @@ def compute_ks_metric(
     - kss: Array containing the KS metrics for each target and horizon.
     """
 
-    # shape of predictions: observations.reshape(n_samples, n_traces)
-    # shape of groundtruth: (n_samples,) or (n_samples, 1)
     n_samples = len(icl_object[0].PDF_list)
 
     kss = np.zeros((n_features,))
