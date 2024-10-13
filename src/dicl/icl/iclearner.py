@@ -9,7 +9,7 @@ from tqdm import tqdm
 import numpy as np
 from numpy.typing import NDArray
 
-from dicl.utils.updated_from_liu_et_al import (
+from dicl.utils.icl import (
     serialize_arr,
     SerializerSettings,
     calculate_multiPDF_llama3,
@@ -17,7 +17,7 @@ from dicl.utils.updated_from_liu_et_al import (
 
 if TYPE_CHECKING:
     from transformers import AutoModel, AutoTokenizer
-    from dicl.utils.updated_from_liu_et_al import MultiResolutionPDF
+    from dicl.utils.icl import MultiResolutionPDF
 
 
 @dataclass
