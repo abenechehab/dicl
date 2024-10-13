@@ -604,7 +604,6 @@ class vICL(DICL):
     def __init__(
         self,
         n_features: int,
-        n_components: int,
         model: "AutoModel",
         tokenizer: "AutoTokenizer",
         rescale_factor: float = 7.0,
@@ -615,7 +614,6 @@ class vICL(DICL):
 
         Args:
             n_features (int): Number of input features.
-            n_components (int): Number of independent components to be learned.
             model (AutoModel): Pretrained model used for time series prediction.
             tokenizer (AutoTokenizer): Tokenizer associated with the pretrained model.
             rescale_factor (float, optional): Rescaling factor for the transformed data.
@@ -623,13 +621,10 @@ class vICL(DICL):
             up_shift (float, optional): Shift factor applied to rescaled data.
                 Defaults to 1.5.
         """
-        assert n_features == n_components, "vICL doesn't support a different number of"
-        f" components ({n_components}) than the number of features ({n_features})"
-
         super(vICL, self).__init__(
             disentangler=IdentityTransformer(),
             n_features=n_features,
-            n_components=n_components,
+            n_components=n_features,
             model=model,
             tokenizer=tokenizer,
             rescale_factor=rescale_factor,
