@@ -84,7 +84,7 @@ Do not hesitate to contribute to this project by submitting pull requests or iss
 
 ## Credits
 
-- We would like to thank **CleanRL** for providing the SAC implementations used in this project (also **DICL-SAC** is implemented following `cleanrl` principles).
+- We would like to thank [**CleanRL**](https://github.com/vwxyzjn/cleanrl) for providing the SAC implementations used in this project (also **DICL-SAC** is implemented following `cleanrl` principles).
 - We also acknowledge the work done in [LLMs learn governing principles of dynamical systems, revealing an in-context neural scaling law](https://github.com/AntonioLiu97/llmICL), from which we have integrated certain [functions](src/dicl/utils/icl.py) into our implementation.
 
 ---
