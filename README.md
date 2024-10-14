@@ -4,7 +4,7 @@
 This repository contains the official implementation of the paper:
 
    >Abdelhakim Benechehab, Youssef Attia El Hili, Ambroise Odonnat, Oussama Zekri, Albert Thomas, Giuseppe Paolo, Maurizio Filippone, Ievgen Redko, Balázs Kégl.
-   [Zero-shot Model-based Reinforcement Learning using Large Language Models](https://arxiv.org/pdf/2402.10198).
+   [Zero-shot Model-based Reinforcement Learning using Large Language Models]().
 
 ### Abstract:
 The emerging zero-shot capabilities of Large Language Models (LLMs) have led to their applications in areas extending well beyond natural language processing tasks.
