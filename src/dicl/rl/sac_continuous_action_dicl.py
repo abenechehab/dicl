@@ -606,7 +606,6 @@ def main():
                         ]
                         time_series = time_series.reshape((args.context_length, -1))
                         DICL = dicl.vICL(
-                            n_components=time_series.shape[1],
                             n_features=time_series.shape[1],
                             model=model,
                             tokenizer=tokenizer,
