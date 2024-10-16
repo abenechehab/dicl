@@ -4,7 +4,7 @@
 This repository contains the official implementation of the paper:
 
    >Abdelhakim Benechehab, Youssef Attia El Hili, Ambroise Odonnat, Oussama Zekri, Albert Thomas, Giuseppe Paolo, Maurizio Filippone, Ievgen Redko, Balázs Kégl.
-   [Zero-shot Model-based Reinforcement Learning using Large Language Models]().
+   [Zero-shot Model-based Reinforcement Learning using Large Language Models](https://arxiv.org/abs/2410.11711).
 
 ### Abstract:
 The emerging zero-shot capabilities of Large Language Models (LLMs) have led to their applications in areas extending well beyond natural language processing tasks.
@@ -58,7 +58,11 @@ pre-commit install
 ### DICL-SAC
 - Install the RL optional dependencies then run the command *dicl-sac*. For instance,
 ```
-dicl-sac --seed $RANDOM --env-id Pendulum --total-timesteps 10000 --exp_name "test" --batch_size 64 --llm_batch_size 7 --llm_learning_frequency 16 --context_length 197 --interact_every 200 --learning_starts 1000 --llm_learning_starts 2000 --llm_model 'meta-llama/Llama-3.2-1B'
+dicl-sac --seed $RANDOM --env-id HalfCheetah --total-timesteps 1000000 --exp_name "test_5p_vicl" --batch_size 128 --llm_batch_size 7 --llm_learning_frequency 256 --context_length 500 --interact_every 1000 --learning_starts 5000 --llm_learning_starts 10000 --llm_model 'meta-llama/Llama-3.2-1B' --method 'vicl'
+
+dicl-sac --seed $RANDOM --env-id Hopper --total-timesteps 1000000 --exp_name "test_10p_vicl" --batch_size 128 --llm_batch_size 13 --llm_learning_frequency 256 --context_length 500 --interact_every 1000 --learning_starts 5000 --llm_learning_starts 10000 --llm_model 'meta-llama/Llama-3.2-1B' --method 'vicl'
+
+dicl-sac --seed $RANDOM --env-id Pendulum --total-timesteps 10000 --exp_name "test_5p_dicl-s-pca" --batch_size 64 --llm_batch_size 4 --llm_learning_frequency 16 --context_length 197 --interact_every 200 --learning_starts 1000 --llm_learning_starts 2000 --llm_model 'meta-llama/Llama-3.2-1B' --method 'dicl_s_pca'
 ```
 - Arguments
 
@@ -67,6 +71,8 @@ dicl-sac --seed $RANDOM --env-id Pendulum --total-timesteps 10000 --exp_name "te
 ### SAC (baseline):
 - Run the command *sac*.
 ```
+sac --seed $RANDOM --env-id "HalfCheetah" --total-timesteps 1000000 --exp_name "test_baseline" --interact_every 1000 --batch_size 128 --learning_starts 5000
+sac --seed $RANDOM --env-id "Hopper" --total-timesteps 1000000 --exp_name "test_baseline" --interact_every 1000 --batch_size 128 --learning_starts 5000
 sac --seed $RANDOM --env-id "Pendulum" --total-timesteps 10000 --exp_name "test_baseline" --interact_every 200 --batch_size 64 --learning_starts 1000
 ```
 - Arguments:
