@@ -1,4 +1,4 @@
-# DICL: Disentangled In-Context Learning
+# DICL: Disentangled In-Context Learning for multivariate time-series forecasting
 
 ## Overview
 This repository contains the official implementation of the paper:
