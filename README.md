@@ -1,4 +1,4 @@
-# Zero-shot Model-based Reinforcement Learning using Large Language Models
+# DICL: Disentangled In-Context Learning
 
 ## Overview
 This repository contains the official implementation of the paper:
@@ -15,16 +15,6 @@ We present proof-of-concept applications in two reinforcement learning settings:
 Our experiments further demonstrate that our approach produces well-calibrated uncertainty estimates.
 
 ![main figure](figures/main_figure_for_repo.PNG)
-
-
-## Directory structure
-An overview of the repository's structure and contents (inside `/src/dicl/`):
-
-- `main/`: Contains classes for the `ICLTrainer` and `DICL`. Objects of type `ICLTrainer` have methods to update the LLM context with a time series, call the LLM, collect the predicted probability density functions, compute statistics, etc. Objects of type `DICL` have methods to fit the disentangler, predict single-step or multi-step, compute metrics (MSE and KS), and plot the results.
-- `rl/`: Contains scripts to run the SAC baseline and **DICL-SAC**.
-- `data/`: A sample dataset from the D4RL dataset of the HalfCheetah environment for the [getting started notebook](getting_started.ipynb).
-- `utils/`: Helper functions and classes.
-
 
 ## Installation
 
@@ -78,6 +68,15 @@ sac --seed $RANDOM --env-id "Pendulum" --total-timesteps 10000 --exp_name "test_
 - Arguments:
 
 ![main figure](figures/sac_args.PNG)
+
+
+## Directory structure
+An overview of the repository's structure and contents (inside `/src/dicl/`):
+
+- `main/`: Contains classes for the `ICLTrainer` and `DICL`. Objects of type `ICLTrainer` have methods to update the LLM context with a time series, call the LLM, collect the predicted probability density functions, compute statistics, etc. Objects of type `DICL` have methods to fit the disentangler, predict single-step or multi-step, compute metrics (MSE and KS), and plot the results.
+- `rl/`: Contains scripts to run the SAC baseline and **DICL-SAC**.
+- `data/`: A sample dataset from the D4RL dataset of the HalfCheetah environment for the [getting started notebook](getting_started.ipynb).
+- `utils/`: Helper functions and classes.
 
 
 ## License
