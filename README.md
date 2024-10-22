@@ -98,7 +98,7 @@ If you use DICL in your work, please cite the accompanying
 [paper](https://arxiv.org/abs/2410.11711):
 
 ```bibtex
-@misc{benechehab2024zeroshotmodelbasedreinforcementlearning,
+@misc{benechehab2024dicl,
       title={Zero-shot Model-based Reinforcement Learning using Large Language Models}, 
       author={Abdelhakim Benechehab and Youssef Attia El Hili and Ambroise Odonnat and Oussama Zekri and Albert Thomas and Giuseppe Paolo and Maurizio Filippone and Ievgen Redko and Balázs Kégl},
       year={2024},
