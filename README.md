@@ -92,4 +92,19 @@ Do not hesitate to contribute to this project by submitting pull requests or iss
 - We would like to thank [**CleanRL**](https://github.com/vwxyzjn/cleanrl) for providing the SAC implementations used in this project (also **DICL-SAC** is implemented following `cleanrl` principles).
 - We also acknowledge the work done in [LLMs learn governing principles of dynamical systems, revealing an in-context neural scaling law](https://github.com/AntonioLiu97/llmICL), from which we have integrated certain [functions](src/dicl/utils/icl.py) into our implementation.
 
----
+## Citing DICL 📚
+
+If you use DICL in your work, please cite the accompanying
+[paper](https://arxiv.org/abs/2410.11711):
+
+```bibtex
+@misc{benechehab2024zeroshotmodelbasedreinforcementlearning,
+      title={Zero-shot Model-based Reinforcement Learning using Large Language Models}, 
+      author={Abdelhakim Benechehab and Youssef Attia El Hili and Ambroise Odonnat and Oussama Zekri and Albert Thomas and Giuseppe Paolo and Maurizio Filippone and Ievgen Redko and Balázs Kégl},
+      year={2024},
+      eprint={2410.11711},
+      archivePrefix={arXiv},
+      primaryClass={stat.ML},
+      url={https://arxiv.org/abs/2410.11711}, 
+}
+```
