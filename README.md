@@ -30,7 +30,7 @@ conda create -n dicl python=3.9
 ```bash
 conda activate dicl
 ```  
-🔹 **Install the package** (for the [getting started notebook](getting_started.ipynb)):  
+🔹 **Install the package**:  
 ```bash
 pip install .
 ```  
@@ -73,11 +73,11 @@ sac --seed $RANDOM --env-id "HalfCheetah" --total-timesteps 1000000 --exp_name "
 
 Overview of the repository’s contents (inside `/src/dicl/`):  
 
-- 📌 `dicl.py` → The main class `DICL` that orchestrates the framework
-- 📌 `icl/` → Core LLM usage classes such as `ICLTrainer` 
-- 📌 `rl/` → Scripts for **SAC baseline** & **DICL-SAC** 
-- 📌 `data/` → Sample dataset from **D4RL** for testing
-- 📌 `utils/` → Helper functions
+- `dicl.py` → The main class `DICL` that orchestrates the framework
+- `icl/` → Core LLM usage classes such as `ICLTrainer` 
+- `rl/` → Scripts for **SAC baseline** & **DICL-SAC** 
+- `data/` → Sample dataset from **D4RL** for testing
+- `utils/` → Helper functions
 
 ---
 
@@ -89,8 +89,8 @@ Overview of the repository’s contents (inside `/src/dicl/`):
 
 ## 🌍 Open-source Participation  
 
-We **welcome contributions**! 🎉  
-Feel free to **submit issues, PRs, or feedback**—your ideas help improve DICL. 💡🚀  
+We **welcome contributions**!
+Feel free to **submit issues, PRs, or feedback**—your ideas help improve DICL. 
 
 ---
 
@@ -98,8 +98,8 @@ Feel free to **submit issues, PRs, or feedback**—your ideas help improve DICL.
 
 A big **thank you** to:  
 
-🔹 **[CleanRL](https://github.com/vwxyzjn/cleanrl)** for their **SAC implementations** 
-🔹 The authors of the paper **[LLMs learn governing principles of dynamical systems, revealing an in-context neural scaling law](https://github.com/AntonioLiu97/llmICL)** for access to their codebase
+- **[CleanRL](https://github.com/vwxyzjn/cleanrl)** for their **SAC implementations** 
+- The authors of the paper **[LLMs learn governing principles of dynamical systems, revealing an in-context neural scaling law](https://github.com/AntonioLiu97/llmICL)** for access to their codebase
 
 ---
 
