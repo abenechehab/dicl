@@ -3,7 +3,7 @@
 
 ## 🚀 **Exciting News!**  
 Our paper has been **accepted at ICLR 2025**! 🎉📄🎓  
-👉 **[Zero-shot Model-based Reinforcement Learning using Large Language Models](https://arxiv.org/abs/2410.11711)**  
+👉 **[Zero-shot Model-based Reinforcement Learning using Large Language Models](https://openreview.net/forum?id=uZFXpPrwSh)**  
 
 ---
 
@@ -11,7 +11,7 @@ Our paper has been **accepted at ICLR 2025**! 🎉📄🎓
 This repository contains the **official implementation** of the paper:  
 
 > 📖 Abdelhakim Benechehab, Youssef Attia El Hili, Ambroise Odonnat, Oussama Zekri, Albert Thomas, Giuseppe Paolo, Maurizio Filippone, Ievgen Redko, Balázs Kégl.  
-> **[Zero-shot Model-based Reinforcement Learning using Large Language Models](https://arxiv.org/abs/2410.11711)**  
+> **[Zero-shot Model-based Reinforcement Learning using Large Language Models](https://openreview.net/forum?id=uZFXpPrwSh)**  
 
 ### 📌 Abstract  
 The emerging zero-shot capabilities of Large Language Models (LLMs) have led to their applications in areas extending well beyond natural language processing tasks. In reinforcement learning, while LLMs have been extensively used in text-based environments, their integration with continuous state spaces remains understudied. In this paper, we investigate how pre-trained LLMs can be leveraged to predict in context the dynamics of continuous Markov decision processes. We identify handling multivariate data and incorporating the control signal as key challenges that limit the potential of LLMs' deployment in this setup and propose **Disentangled In-Context Learning (DICL)** to address them. We present proof-of-concept applications in two reinforcement learning settings: model-based policy evaluation and data-augmented off-policy reinforcement learning, supported by theoretical analysis of the proposed methods. Our experiments further demonstrate that our approach produces well-calibrated uncertainty estimates.
